@@ -1,0 +1,11 @@
+[package]
+name = "organ"
+version = "0.1.0"
+authors = ["Arnaud Castellanos Galea <poderosoarnaud@gmail.com>"]
+
+[lib]
+name = "organ"
+crate-type = ["dylib"]
+
+[dependencies]
+vst2 = { git = "https://github.com/overdrivenpotato/rust-vst2.git" }
