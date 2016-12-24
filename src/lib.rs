@@ -8,6 +8,7 @@ mod pipe;
 mod organ;
 mod effects;
 mod helpers;
+mod sample;
 
 #[macro_export]
 macro_rules! synth_main {

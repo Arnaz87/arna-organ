@@ -10,7 +10,7 @@ pub struct Info {
   pub name: String,
   pub author: String,
   pub id: u32,
-  pub params: u16,
+  pub params: usize,
 }
 
 #[derive(Clone,Copy)]
@@ -41,12 +41,21 @@ pub trait Synth {
     }
   }
   fn new() -> Self;
-  fn run(&mut self, left: &mut [f32], right: &mut [f32], events: Vec<Event>) {}
 
-  fn set_param(&mut self, index: u16, value: f32) {}
-  fn param_name(index: u16) -> String { format!("Parameter {}", index) }
-  fn param_default(index: u16) -> f32 { 0.0f32 }
-  fn param_label(index: u16, value: f32) -> String { format!("{}", value) }
+  //fn process(&mut self, left: &mut [f32], right: &mut [f32], events: Vec<Event>) {}
+
+  fn clock(&mut self) -> (f32, f32) {(0.0,0.0)}
+
+  fn events(&mut self, events: Vec<Event>) {}
+  //fn event(&mut self, event: Event) {}
+
+  fn note_on(&mut self, note: u8, vel: u8) {}
+  fn note_off(&mut self, note: u8) {}
+
+  fn set_param(&mut self, index: usize, value: f32) {}
+  fn param_name(index: usize) -> String { format!("Parameter {}", index) }
+  fn param_default(index: usize) -> f32 { 0.0f32 }
+  fn param_label(index: usize, value: f32) -> String { format!("{}", value) }
 
   fn arch_change(&mut self, arch: Architecture) {}
 }
@@ -67,11 +76,11 @@ impl<T: Synth> Default for SynthPlugin<T> {
 
     synth.arch_change(arch);
 
-    let mut params = vec![0_f32; info.params as usize];
+    let mut params = vec![0_f32; info.params];
     for i in 0..(info.params-1) {
       let value = T::param_default(i);
       synth.set_param(i, value);
-      params[i as usize] = value;
+      params[i] = value;
     }
 
     SynthPlugin{
@@ -118,10 +127,10 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
 
   fn set_parameter(&mut self, index: i32, value: f32) {
     self.params[index as usize] = value;
-    self.synth.set_param(index as u16, value);
+    self.synth.set_param(index as usize, value);
   }
 
-  fn get_parameter_name(&self, index: i32) -> String { T::param_name(index as u16) }
+  fn get_parameter_name(&self, index: i32) -> String { T::param_name(index as usize) }
 
   fn set_sample_rate(&mut self, rate: f32) {
     self.arch.sample_rate = rate;
@@ -137,9 +146,47 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
     let left: &mut [f32] = hd[0];
     let right: &mut [f32] = tl[0];
 
-    let events = replace(&mut self.events, Vec::new());
+    //let events = replace(&mut self.events, Vec::new());
 
-    self.synth.run(left, right, events);
+    let mut iterator = left.iter_mut().zip(right.iter_mut());
+
+    //self.synth.events(events);
+
+    /*
+    // Quería hacer algo como:
+    let mut last_event = 0;
+    for event in self.events.drain() {
+      let next_event = event.sample - last_event;
+      for (lsample, rsample) iterator.take(next_event) {
+        //LOLOLOL
+      }
+    }
+    // Pero no puedo porque take consume el iterador, y después de
+    // eso no lo puedo usar más...
+    */
+
+    let mut events = self.events.drain(..);
+    let mut last_event = events.next();
+    for (i, (lsample, rsample)) in iterator.enumerate() {
+
+      // NOTE: Esto está mal porque si hay dos eventos en el mismo sample
+      // uno se va a dejar para el siguiente, aunque no se nota...
+      match last_event.clone() {
+        Some( Event{ sample, data } ) if (sample as usize)<=i => {
+          match data[0] {
+            0x90 => self.synth.note_on(data[1], data[2]),
+            0x80 => self.synth.note_off(data[1]),
+            _ => {}
+          }
+          last_event = events.next();
+        }
+        _ => {}
+      }
+
+      let (l, r) = self.synth.clock();
+      *lsample = l;
+      *rsample = r;
+    }
   }
 
   fn process_events(&mut self, events: Vec<VstEvent>) {

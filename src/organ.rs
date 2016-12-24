@@ -6,8 +6,9 @@ use helpers::*;
 use voice;
 
 const WHEEL_COUNT: usize = 8;
-const PIPE_COUNT: usize = 3;
+const PIPE_COUNT: usize = 0;
 const PIPE_PARAMS: usize = 6;
+const FIRST_PARAMS: usize = 17;
 
 const wheel_harmonics: [f32; WHEEL_COUNT] = [
   1.0, 3.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0
@@ -42,7 +43,6 @@ impl voice::Voice for Voice {
     }
   }
   fn note_off(&mut self) {
-    self.sample = 0.0;
     self.main_osc.release();
     for osc in self.pipe_oscs.iter_mut() {
       osc.release()
@@ -62,6 +62,11 @@ pub struct Organ {
   voices: voice::Manager<Voice>,
 
   vibrato: Vibrato,
+  leslie: Leslie,
+  room: Room,
+
+  // Temporal
+  click: f32,
 }
 
 macro_rules! zip {
@@ -82,7 +87,7 @@ impl Synth for Organ {
       name: "Basic Plugin".to_string(),
       author: "Arnaud".to_string(),
       id: 42,
-      params: (5+WHEEL_COUNT+ PIPE_COUNT*PIPE_PARAMS) as u16,
+      params: FIRST_PARAMS + WHEEL_COUNT + PIPE_COUNT*PIPE_PARAMS,
     }
   }
   
@@ -99,67 +104,81 @@ impl Synth for Organ {
       voices: Default::default(),
 
       vibrato: Vibrato::new(),
+      leslie: Leslie::new(),
+      room: Room::new(),
+
+      click: 1.0,
     }
   }
 
   fn arch_change(&mut self, arch: Architecture) {
     self.sample_rate = arch.sample_rate;
     self.vibrato.set_sample_rate(arch.sample_rate);
+    self.leslie.set_sample_rate(arch.sample_rate);
+    self.room.set_sample_rate(arch.sample_rate);
   }
 
-  fn run(&mut self, left: &mut [f32], right: &mut [f32], events: Vec<Event>) {
-    self.voices.add_events(events);
+  fn clock(&mut self) -> (f32, f32) {
+    let mut smpl = 0_f32;
 
-    for (lsample, rsample) in zip!(mut left, mut right) {
-      self.voices.process_sample();
+    for voice in &mut self.voices {
+      let mut v_smpl = 0.0;
 
-      let mut smpl = 0_f32;
+      // Voice sample
+      let s = {
+        let delta = voice.freq / self.sample_rate;
+        let s = mod1(voice.sample + delta);
+        voice.sample = s;
+        s // Return local s
+      };
 
-      for voice in &mut self.voices {
-        let mut v_smpl = 0.0;
+      self.main_pipe.envelope(&mut voice.main_osc, self.sample_rate);
 
-        // Voice sample
-        let s = {
-          let delta = voice.freq / self.sample_rate;
-          let s = mod1(voice.sample + delta);
-          voice.sample = s;
-          s // Return local s
-        };
-
-        self.main_pipe.envelope(&mut voice.main_osc, self.sample_rate);
-
-        for (gain, harm) in zip!(self.wheel_gains, wheel_harmonics) {
-          let s = mod1(s * harm);
-          let vol = voice.main_osc.vol * gain;
-          v_smpl += self.main_pipe.sample(s) * vol;
-        }
-
-        for (osc, pipe) in zip!(mut voice.pipe_oscs, self.pipes) {
-          // IMPORTANTE:
-          // Creo que Rust tiene un bug.
-          // Si activo está linea, el programa se pone raro y deja de sonar
-
-          //if pipe.gain > 0.0 {
-            pipe.envelope(osc, self.sample_rate);
-            let s = mod1(s * pipe.harm);
-            let vol = pipe.gain * osc.vol;
-            v_smpl += pipe.sample(s) * vol;
-          //}
-        }
-
-        smpl += v_smpl * (voice.vel as f32/256.0) * self.gain;
+      for (gain, harm) in zip!(self.wheel_gains, wheel_harmonics) {
+        let s = mod1(s * harm);
+        let vol = voice.main_osc.vol * gain;
+        v_smpl += self.main_pipe.sample(s) * vol;
       }
 
-      smpl = smpl*self.gain;
+      for (osc, pipe) in zip!(mut voice.pipe_oscs, self.pipes) {
+        // IMPORTANTE:
+        // Creo que Rust tiene un bug.
+        // Si activo está linea, el programa se pone raro y deja de sonar
 
-      smpl = self.vibrato.run(smpl);
+        //if pipe.gain > 0.0 {
+          pipe.envelope(osc, self.sample_rate);
+          let s = mod1(s * pipe.harm);
+          let vol = pipe.gain * osc.vol;
+          v_smpl += pipe.sample(s) * vol;
+        //}
+      }
 
-      *lsample = smpl;
-      *rsample = smpl;
+      smpl += v_smpl * (voice.vel as f32/256.0) * self.gain;
     }
+
+    //smpl = smpl + self.click;
+    //self.click *= -0.9;
+    //self.click *= 0.1;
+
+    smpl = smpl*self.gain;
+
+    smpl = self.vibrato.run(smpl);
+    
+    let (l, r) = self.leslie.run(smpl);
+    let (l, r) = self.room.clock(l, r);
+
+    (l, r)
   }
 
-  fn param_name (index: u16) -> String {
+  fn note_on(&mut self, note: u8, vel: u8) {
+    self.click = 1.0;
+    self.voices.note_on(note, vel);
+  }
+  fn note_off(&mut self, note: u8) {
+    self.voices.note_off(note);
+  }
+
+  fn param_name (index: usize) -> String {
     match index {
       0 => "Warm".to_string(),
       1 => "Cold".to_string(),
@@ -169,8 +188,20 @@ impl Synth for Organ {
       4 => "Vibrato Depth".to_string(),
       5 => "Vibrato Freq".to_string(),
       6 => "Vibrato Mix".to_string(),
+
+      7 => "Leslie Freq".to_string(),
+      8 => "Leslie Tremolo".to_string(),
+      9 => "Leslie Vibrato".to_string(),
+      10 => "Leslie Tremolo Separation".to_string(),
+      11 => "Leslie Vibrato Separation".to_string(),
+      12 => "Leslie Stereo".to_string(),
+      13 => "Leslie Mix".to_string(),
+
+      14 => "Room Size".to_string(),
+      15 => "Room Diff".to_string(),
+      16 => "Room Mix".to_string(),
       _ => {
-        let i = (index-7) as usize;
+        let i = index - FIRST_PARAMS;
         if i < WHEEL_COUNT {
           format!("Wheel {}", i+1)
         } else {
@@ -190,7 +221,7 @@ impl Synth for Organ {
     }
   }
 
-  fn set_param (&mut self, index: u16, value: f32) {
+  fn set_param (&mut self, index: usize, value: f32) {
     match index {
       0 => {self.main_pipe.warm = value; self.main_pipe.regen();},
       1 => {self.main_pipe.cold = value; self.main_pipe.regen();},
@@ -200,8 +231,20 @@ impl Synth for Organ {
       4 => self.vibrato.depth = value,
       5 => self.vibrato.freq = value,
       6 => self.vibrato.mix = value,
+
+      7 => self.leslie.freq = value,
+      8 => self.leslie.vol_depth = value,
+      9 => self.leslie.vib_depth = value,
+      10 => self.leslie.vol_sep = value,
+      11 => self.leslie.vib_sep = value,
+      12 => self.leslie.stereo = value,
+      13 => self.leslie.mix = value,
+
+      14 => self.room.size = value,
+      15 => self.room.diff = value,
+      16 => self.room.mix = value,
       _ => {
-        let i = (index-7) as usize;
+        let i = index - FIRST_PARAMS;
         if i < WHEEL_COUNT {
           self.wheel_gains[i] = value;
         } else {

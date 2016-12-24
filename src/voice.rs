@@ -80,26 +80,34 @@ impl<T: Voice> Manager<T> {
     self.front = self.buffer.pop_front();
   }
 
+  pub fn note_on(&mut self, note: u8, vel: u8) {
+    for voice in self.voices.iter_mut() {
+      if !voice.is_active() {
+        voice.note_on(note, vel);
+        break;
+      }
+    }
+  }
+
+  pub fn note_off(&mut self, note: u8) {
+    // Apagar todas las voces que tocan esta nota
+    for voice in self.voices.iter_mut() {
+      if voice.is_note(note) { voice.note_off() }
+    }
+  }
+
   pub fn process_sample(&mut self) {
     use std::mem::replace;
 
     self.sample = self.sample + 1;
 
     let mut pop = false;
-    match self.front {
+    match self.front.clone() {
       Some(ref mut event) => if event.sample <= self.sample {
         if event.vel == 0 {
-          // Apagar todas las voces que tocan esta nota
-          for voice in self.voices.iter_mut() {
-            if voice.is_note(event.note) { voice.note_off() }
-          }
+          self.note_off(event.note);
         } else {
-          for voice in self.voices.iter_mut() {
-            if !voice.is_active() {
-              voice.note_on(event.note, event.vel);
-              break;
-            }
-          }
+          self.note_on(event.note, event.vel);
         }
         pop = true;
       },

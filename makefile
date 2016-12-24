@@ -17,5 +17,8 @@ run-release:
 copy:
 	cp -i $(DEBUG) ~/Sonido/Vsts/$(DLL)
 
+copy-release:
+	cp -i $(RELEASE) ~/Sonido/Vsts/$(DLL)
+
 clean:
 	cargo clean
