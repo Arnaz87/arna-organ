@@ -1,14 +1,17 @@
 
 use synth::*;
 use pipe::*;
-use effects::*;
 use helpers::*;
 use voice;
+
+use effects::vibrato::Vibrato;
+use effects::leslie::Leslie;
+use effects::room::Room;
 
 const WHEEL_COUNT: usize = 8;
 const PIPE_COUNT: usize = 0;
 const PIPE_PARAMS: usize = 6;
-const FIRST_PARAMS: usize = 17;
+const FIRST_PARAMS: usize = 20;
 
 const wheel_harmonics: [f32; WHEEL_COUNT] = [
   1.0, 3.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0
@@ -67,6 +70,7 @@ pub struct Organ {
 
   // Temporal
   click: f32,
+  click_s: f32,
 }
 
 macro_rules! zip {
@@ -107,7 +111,8 @@ impl Synth for Organ {
       leslie: Leslie::new(),
       room: Room::new(),
 
-      click: 1.0,
+      click: 0.0,
+      click_s: 1.0,
     }
   }
 
@@ -156,9 +161,10 @@ impl Synth for Organ {
       smpl += v_smpl * (voice.vel as f32/256.0) * self.gain;
     }
 
-    //smpl = smpl + self.click;
-    //self.click *= -0.9;
-    //self.click *= 0.1;
+    if self.click > 0.0 {
+      smpl = smpl + self.click_s;
+      self.click_s *= 1.0-self.click_s;
+    }
 
     smpl = smpl*self.gain;
 
@@ -171,11 +177,21 @@ impl Synth for Organ {
   }
 
   fn note_on(&mut self, note: u8, vel: u8) {
-    self.click = 1.0;
+    self.click_s = 1.0;
     self.voices.note_on(note, vel);
   }
   fn note_off(&mut self, note: u8) {
     self.voices.note_off(note);
+  }
+
+  fn param_default(index: usize) -> f32 {
+    match index {
+      14 => 1.0, // Room Size
+      18 => 1.0, // Room Mix
+      19 => 0.1, // Click
+
+      _ => 0.0
+    }
   }
 
   fn param_name (index: usize) -> String {
@@ -199,7 +215,11 @@ impl Synth for Organ {
 
       14 => "Room Size".to_string(),
       15 => "Room Diff".to_string(),
-      16 => "Room Mix".to_string(),
+      16 => "Room Feedback".to_string(),
+      17 => "Room Delay".to_string(),
+      18 => "Room Mix".to_string(),
+
+      19 => "Click".to_string(),
       _ => {
         let i = index - FIRST_PARAMS;
         if i < WHEEL_COUNT {
@@ -242,7 +262,11 @@ impl Synth for Organ {
 
       14 => self.room.size = value,
       15 => self.room.diff = value,
-      16 => self.room.mix = value,
+      16 => self.room.set_feedback(value),
+      17 => self.room.delay = value,
+      18 => self.room.mix = value,
+
+      19 => self.click = value,
       _ => {
         let i = index - FIRST_PARAMS;
         if i < WHEEL_COUNT {
