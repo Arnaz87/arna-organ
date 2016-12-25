@@ -11,7 +11,7 @@ use effects::room::Room;
 const WHEEL_COUNT: usize = 8;
 const PIPE_COUNT: usize = 0;
 const PIPE_PARAMS: usize = 6;
-const FIRST_PARAMS: usize = 20;
+const FIRST_PARAMS: usize = 21;
 
 const wheel_harmonics: [f32; WHEEL_COUNT] = [
   1.0, 3.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0
@@ -187,8 +187,8 @@ impl Synth for Organ {
   fn param_default(index: usize) -> f32 {
     match index {
       14 => 1.0, // Room Size
-      18 => 1.0, // Room Mix
-      19 => 0.1, // Click
+      19 => 1.0, // Room Mix
+      20 => 0.1, // Click
 
       _ => 0.0
     }
@@ -214,12 +214,13 @@ impl Synth for Organ {
       13 => "Leslie Mix".to_string(),
 
       14 => "Room Size".to_string(),
-      15 => "Room Diff".to_string(),
-      16 => "Room Feedback".to_string(),
-      17 => "Room Delay".to_string(),
-      18 => "Room Mix".to_string(),
+      15 => "Room Diff 1".to_string(),
+      16 => "Room Diff 2".to_string(),
+      17 => "Room Feedback".to_string(),
+      18 => "Room Delay".to_string(),
+      19 => "Room Mix".to_string(),
 
-      19 => "Click".to_string(),
+      20 => "Click".to_string(),
       _ => {
         let i = index - FIRST_PARAMS;
         if i < WHEEL_COUNT {
@@ -260,13 +261,14 @@ impl Synth for Organ {
       12 => self.leslie.stereo = value,
       13 => self.leslie.mix = value,
 
-      14 => self.room.size = value,
-      15 => self.room.diff = value,
-      16 => self.room.set_feedback(value),
-      17 => self.room.delay = value,
-      18 => self.room.mix = value,
+      14 => self.room.set_size(value),
+      15 => self.room.diff1 = value,
+      16 => self.room.diff2 = value,
+      17 => self.room.set_feedback(value),
+      18 => self.room.delay = value,
+      19 => self.room.mix = value,
 
-      19 => self.click = value,
+      20 => self.click = value,
       _ => {
         let i = index - FIRST_PARAMS;
         if i < WHEEL_COUNT {

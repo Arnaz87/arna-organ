@@ -54,9 +54,16 @@ impl<T: Default + Copy> Buffer<T> {
   }
 
   pub fn get (&self, s: f32) -> T {
-    debug_assert!(s <= self.secs);
+    if s > self.secs || s < 0.0 {
+      panic!("Buffer access at {}, bigger than buffer size {}", s, self.secs)
+    };
 
     self.index((s*self.sample_rate) as usize)
+  }
+
+  pub fn safe_get(&self, s: f32) -> Result<T, String> {
+    if s <= self.secs { Ok(self.get(s)) }
+    else { Err(format!("Buffer access at {} out of bounds ({})", s, self.secs)) }
   }
 }
 
