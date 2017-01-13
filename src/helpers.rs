@@ -2,7 +2,8 @@
 use std::f32::consts::PI;
 
 pub fn sin01 (x: f32) -> f32 { (x*2.0*PI).sin() }
-pub fn sigm (x: f32) -> f32 { x/(1.0 + x.abs()) }
+//pub fn sigm (x: f32) -> f32 { x/(1.0 + x.abs()) }
+pub fn sigm (x: f32) -> f32 { x.tanh() }
 
 // Fast sin(2*PI*x)
 pub fn fsin (x: f32) -> f32 {
