@@ -8,19 +8,6 @@ use std::slice::{Iter, IterMut};
 
 const NUM_VOICES: usize = 8;
 
-/*
-#[derive(Default)]
-pub struct Voice {
-  pub active: bool,
-
-  pub note: u8,
-  pub vel: u8,
-
-  pub freq: f32,
-  pub sample: f32,
-}
-*/
-
 #[derive(Clone, Copy)]
 struct Note {
   sample: u32,
@@ -118,13 +105,6 @@ impl<T: Voice> Manager<T> {
       replace(&mut self.front, self.buffer.pop_front());
     }
   }
-
-  /*
-  fn iter_mut<'a> (&'a mut self) -> Filter<IterMut<'a, Voice>, fn(&&mut Voice)->bool> {
-    fn voice_is_active (voice: &&mut Voice) -> bool { voice.active }
-    self.voices.iter_mut().filter(voice_is_active)
-  }
-  */
 }
 
 impl<'a, T: Voice> IntoIterator for &'a mut Manager<T> {

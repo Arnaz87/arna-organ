@@ -5,6 +5,7 @@ use std::iter::*;
 #[derive(Default, PartialEq, Clone, Copy)]
 pub struct Sample { l: f32, r: f32 }
 
+#[allow(dead_code)]
 impl Sample {
   pub fn new (l: f32, r: f32) -> Sample { Sample {l: l, r: r} }
   pub fn zero () -> Sample { Sample::new(0.0, 0.0) }

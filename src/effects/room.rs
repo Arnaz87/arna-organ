@@ -1,6 +1,5 @@
 
 use sample::*;
-use helpers::*;
 use effects::buffer::*;
 
 // Pulse Stuff
@@ -99,15 +98,11 @@ pub struct Room {
   orig_buf: Buffer<f32>,
 
   delay_buf_1: Buffer<Sample>,
-  delay_buf_2: Buffer<Sample>,
-  delay_buf_3: Buffer<Sample>,
 
   fb1: Feedback,
   fb2: Feedback,
   fb3: Feedback,
   fb4: Feedback,
-  fb5: Feedback,
-  fb6: Feedback,
 
   fb_buf: Buffer<Sample>,
 }
@@ -126,16 +121,11 @@ impl Room {
       orig_buf: Buffer::new(),
 
       delay_buf_1: Buffer::new(),
-      delay_buf_2: Buffer::new(),
-      delay_buf_3: Buffer::new(),
 
       fb1: Feedback::new(235.0/44100.0, 0.6),
       fb2: Feedback::new(313.0/44100.0, 0.6),
       fb3: Feedback::new(610.0/44100.0, 0.6),
       fb4: Feedback::new(835.0/44100.0, 0.6),
-
-      fb5: Feedback::new(470.0/44100.0, 0.6),
-      fb6: Feedback::new(626.0/44100.0, 0.6),
 
       fb_buf: Buffer::new(),
     }
@@ -148,16 +138,11 @@ impl Room {
     self.orig_buf.init(1.0, sample_rate);
 
     self.delay_buf_1.init(1150.0/44100.0, sample_rate);
-    self.delay_buf_2.init(850.0/44100.0, sample_rate);
-    // El mismo que el segundo, pero para el comb
-    self.delay_buf_3.init(850.0/44100.0, sample_rate);
 
     self.fb1.set_sample_rate(sample_rate);
     self.fb2.set_sample_rate(sample_rate);
     self.fb3.set_sample_rate(sample_rate);
     self.fb4.set_sample_rate(sample_rate);
-    self.fb5.set_sample_rate(sample_rate);
-    self.fb6.set_sample_rate(sample_rate);
   }
 
   pub fn set_feedback (&mut self, fb: f32) {
@@ -167,8 +152,6 @@ impl Room {
     self.fb2.set_feedback(fb);
     self.fb3.set_feedback(fb);
     self.fb4.set_feedback(fb);
-    self.fb5.set_feedback(fb);
-    self.fb6.set_feedback(fb);
   }
 
   pub fn set_size (&mut self, sz: f32) {
@@ -178,8 +161,6 @@ impl Room {
     self.fb2.set_size(sz);
     self.fb3.set_size(sz);
     self.fb4.set_size(sz);
-    self.fb5.set_size(sz);
-    self.fb6.set_size(sz);
   }
 
   fn pulse (&self, pulse: &Pulse) -> Sample {

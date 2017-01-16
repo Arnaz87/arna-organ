@@ -1,10 +1,13 @@
 
 use vst2::plugin::{Info as VstInfo, Plugin, Category, HostCallback};
+use vst2::editor::{Editor as VstEditor};
 use vst2::buffer::AudioBuffer;
 use vst2::event::{Event as VstEvent};
 
 use vst2::plugin::CanDo;
 use vst2::api::Supported;
+
+use editor::Editor;
 
 pub struct Info {
   pub name: String,
@@ -65,6 +68,7 @@ pub struct SynthPlugin<T: Synth> {
   params: Vec<f32>,
   events: Vec<Event>,
   arch: Architecture,
+  editor: Editor,
 }
 
 impl<T: Synth> Default for SynthPlugin<T> {
@@ -83,11 +87,14 @@ impl<T: Synth> Default for SynthPlugin<T> {
       params[i] = value;
     }
 
+    let mut editor = Editor::new();
+
     SynthPlugin{
       synth: synth,
       params: params,
       events: Vec::new(),
       arch: arch,
+      editor: editor,
     }
   }
 }
@@ -138,15 +145,13 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
   }
 
   fn process(&mut self, buffer: AudioBuffer<f32>){
-    use std::mem::replace;
-
     let (_, mut outputs) = buffer.split();
 
     let (mut hd, mut tl) = outputs.split_at_mut(1);
     let left: &mut [f32] = hd[0];
     let right: &mut [f32] = tl[0];
 
-    //let events = replace(&mut self.events, Vec::new());
+    //let events = ::std::mem::replace(&mut self.events, Vec::new());
 
     let mut iterator = left.iter_mut().zip(right.iter_mut());
 
@@ -161,8 +166,7 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
         //LOLOLOL
       }
     }
-    // Pero no puedo porque take consume el iterador, y después de
-    // eso no lo puedo usar más...
+    // Pero no puedo porque take consume el iterador
     */
 
     let mut events = self.events.drain(..);
@@ -170,7 +174,7 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
     for (i, (lsample, rsample)) in iterator.enumerate() {
 
       // NOTE: Esto está mal porque si hay dos eventos en el mismo sample
-      // uno se va a dejar para el siguiente, aunque no se nota...
+      // uno se va a dejar para el siguiente (aunque casi no se nota)
       match last_event.clone() {
         Some( Event{ sample, data } ) if (sample as usize)<=i => {
           match data[0] {
@@ -201,5 +205,9 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
         _ => {}
       }
     }
+  }
+
+  fn get_editor (&mut self) -> Option<&mut VstEditor> {
+    Some(&mut self.editor)
   }
 }

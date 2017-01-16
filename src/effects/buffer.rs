@@ -1,13 +1,12 @@
 
-use sample::*;
 use helpers::*;
 
 pub struct Buffer<T: Default + Copy> {
   secs: f32,
   sample_rate: f32,
   size: usize,
-  pub pos: usize,
-  pub data: Vec<T>
+  pos: usize,
+  data: Vec<T>
 }
 
 impl<T: Default + Copy> Buffer<T> {
@@ -40,10 +39,13 @@ impl<T: Default + Copy> Buffer<T> {
   }
 
   fn index (&self, i: usize) -> T {
-    debug_assert!(i <= self.size);
+    if i > self.size {
+      panic!("Buffer data access at {} out of bounds [data size: {}]", i, self.size)
+    }
+
     let i = {
-      // All of this needs to be done with i32, because
-      // subtracting overflows to the negatives
+      // i es u32, pero estos cálculos tienen restas y se van a los negativos,
+      // por lo que se tienen que hacer con i32
 
       let i = (self.pos as i32) - (i as i32);
       if i >= 0 { i }
@@ -55,15 +57,10 @@ impl<T: Default + Copy> Buffer<T> {
 
   pub fn get (&self, s: f32) -> T {
     if s > self.secs || s < 0.0 {
-      panic!("Buffer access at {}, bigger than buffer size {}", s, self.secs)
+      panic!("Buffer access at {}s out of bounds [buffer size: {}s]", s, self.secs)
     };
 
     self.index((s*self.sample_rate) as usize)
-  }
-
-  pub fn safe_get(&self, s: f32) -> Result<T, String> {
-    if s <= self.secs { Ok(self.get(s)) }
-    else { Err(format!("Buffer access at {} out of bounds ({})", s, self.secs)) }
   }
 }
 
