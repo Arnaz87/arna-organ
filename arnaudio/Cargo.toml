@@ -1,0 +1,14 @@
+[package]
+name = "arnaudio"
+version = "0.1.0"
+authors = ["Arnaud Castellanos Galea <poderosoarnaud@gmail.com>"]
+
+[lib]
+name = "arnaudio"
+
+[dependencies]
+vst2 = { git = "https://github.com/overdrivenpotato/rust-vst2.git" }
+
+libc = "0.2"
+winapi = "0.2"
+user32-sys = "0.2"

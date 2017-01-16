@@ -1,8 +1,8 @@
 
-use synth::*;
+use arnaudio::synth::*;
 use pipe::*;
 use helpers::*;
-use voice;
+use arnaudio::voice;
 
 use effects::vibrato::Vibrato;
 use effects::leslie::Leslie;
