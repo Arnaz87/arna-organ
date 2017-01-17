@@ -87,7 +87,7 @@ impl<T: Synth> Default for SynthPlugin<T> {
       params[i] = value;
     }
 
-    let mut editor = Editor::new();
+    let editor = Editor::new();
 
     SynthPlugin{
       synth: synth,
@@ -153,7 +153,7 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
 
     //let events = ::std::mem::replace(&mut self.events, Vec::new());
 
-    let mut iterator = left.iter_mut().zip(right.iter_mut());
+    let iterator = left.iter_mut().zip(right.iter_mut());
 
     //self.synth.events(events);
 
