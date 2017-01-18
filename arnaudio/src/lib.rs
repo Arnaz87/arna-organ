@@ -1,15 +1,16 @@
 
 extern crate vst2;
+
 extern crate libc;
+
 extern crate winapi;
 extern crate user32;
 extern crate gdi32;
+
 #[macro_use]
 extern crate lazy_static;
 
-#[allow(dead_code)]
 pub mod graphics;
-
 pub mod synth;
 pub mod voice;
 pub mod editor;

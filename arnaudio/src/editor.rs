@@ -4,17 +4,16 @@ use vst2::editor::{Editor as VstEditor};
 
 pub struct Editor {
   isopen: bool,
-  window: EditorWindow,
+  width: u32,
+  height: u32
 }
 
 impl Editor {
   pub fn new () -> Editor {
     Editor {
       isopen: false,
-      window: EditorWindow {
-        width: 300,
-        height: 100,
-      }
+      width: 300,
+      height: 100,
     }
   }
 }
@@ -26,20 +25,29 @@ struct EditorWindow {
 
 impl ::graphics::Window for EditorWindow {
   fn get_size (&self) -> (u32, u32) { (self.width, self.height) }
-  fn paint (&self, ctx: &mut ::graphics::Context) {}
+  fn paint (&self, canvas: &mut ::graphics::Canvas) {
+    canvas.fill_rect((20,20), (80,60), ::graphics::Color::hex(0x77ccff));
+  }
   fn input (&mut self, ev: ::graphics::InputEvent) {}
 }
 
-impl VstEditor for Editor {
-  fn size (&self) -> (i32, i32) {
-    (self.window.width as i32,
-    self.window.height as i32)
+impl Drop for EditorWindow {
+  fn drop (&mut self) {
+    println!("Dropping Editor Window");
   }
+}
+
+impl VstEditor for Editor {
+  fn size (&self) -> (i32, i32) { (self.width as i32, self.height as i32) }
   fn position (&self) -> (i32, i32) { (0, 0) }
   fn is_open (&mut self) -> bool { self.isopen }
 
   fn open (&mut self, ptr: *mut ::libc::c_void) {
-    ::graphics::register_window(&mut self.window, ptr);
+    let window = EditorWindow{
+      width: self.width,
+      height: self.height,
+    };
+    ::graphics::register_window(window, ptr as *mut ::std::os::raw::c_void);
     self.isopen = true;
   }
 }
