@@ -24,10 +24,32 @@ fn print_win_err (msg: &str) {
 
 impl Canvas for WinCanvas {
   fn fill_image (&mut self,
-    source_pos: (u32, u32),
-    dest_pos: (u32, u32),
-    size: (u32,u32)
-  ) {}
+    pos: (u32, u32),
+    img: &Image
+  ) {
+
+    use gdi32::{CreateCompatibleDC, SelectObject, BitBlt, DeleteDC};
+    use std::os::raw::{c_void, c_int};
+
+    unsafe {
+      let mem_hdc = CreateCompatibleDC(self.hdc);
+      let old_hbm = SelectObject(mem_hdc, img.hbm as ::winapi::windef::HGDIOBJ);
+
+      let result = BitBlt(
+        self.hdc,
+        pos.0 as c_int,
+        pos.1 as c_int,
+        img.width as c_int,
+        img.height as c_int,
+        mem_hdc,
+        0, 0, // Source x y
+        ::winapi::wingdi::SRCCOPY
+      );
+
+      SelectObject(mem_hdc, old_hbm);
+      DeleteDC(mem_hdc);
+    }
+  }
 
   fn fill_rect(&mut self,
     pos: (u32, u32),
@@ -217,8 +239,6 @@ fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) {
     (*win).get_size()
   };
 
-  let (width, height) = (50,50);
-
   // Esto crea un puntero independiente en la memoria
   let winbox_ptr: *mut Arc<Mutex<Window>> = Box::into_raw(Box::new(win_arc));
 
@@ -239,6 +259,108 @@ fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) {
 
   if hwnd.is_null() {
     print_win_err("Create Window at make_window");
+  }
+}
+
+pub struct Image {
+  width: u32,
+  height: u32,
+  hbm: ::winapi::windef::HBITMAP,
+  img: ::image::DynamicImage
+}
+
+impl Image {
+
+  fn make_hbitmap (img: &::image::DynamicImage) -> ::winapi::windef::HBITMAP {
+    use std::mem::size_of;
+
+    use image::{GenericImage, Pixel};
+
+    use winapi::wingdi::{BITMAPINFO, BITMAPINFOHEADER};
+    use winapi::winnt::{LONG};
+    use winapi::minwindef::DWORD;
+
+    let (width, height) = img.dimensions();
+
+    let header = BITMAPINFOHEADER {
+      biSize: size_of::<BITMAPINFOHEADER>() as DWORD,
+      biWidth: width as LONG,
+      biHeight: height as LONG, // Positivo: bottom-up, Negativo: top-down
+      biPlanes: 1,
+      biBitCount: 32,
+      biCompression: ::winapi::wingdi::BI_RGB,
+
+      // El resto de los campos no son importantes
+      biSizeImage: 0, // This may be set to zero for BI_RGB bitmaps.
+      biXPelsPerMeter: 0,
+      biYPelsPerMeter: 0,
+      biClrUsed: 0, // If zero, uses maximum number of colors.
+      biClrImportant: 0, // If zero, all colors are required.
+    };
+
+    let bminfo = BITMAPINFO {
+      bmiHeader: header,
+      bmiColors: []
+    };
+
+    let mut bits: *mut c_void = ::std::ptr::null_mut();
+
+    let hbitmap = unsafe {
+      ::gdi32::CreateDIBSection(
+        0 as ::winapi::windef::HDC,
+        &bminfo,
+        ::winapi::wingdi::DIB_RGB_COLORS,
+        &mut bits,
+        0 as ::winapi::winnt::HANDLE,
+        0
+      )
+    };
+
+    if !bits.is_null() {
+
+      let pixels: &mut [u8] = unsafe {
+        let ptr = bits as *mut u8;
+        let len = (width*height*4) as usize;
+        ::std::slice::from_raw_parts_mut(ptr, len)
+      };
+
+      for y in 0..height {
+        for x in 0..width {
+          let i = ((y*width + x)*4) as usize;
+
+          let (r,g,b,a) = img.get_pixel(x,y).channels4();
+
+          pixels[i+0] = r;
+          pixels[i+1] = g;
+          pixels[i+2] = b;
+          pixels[i+3] = a;
+        }
+      }
+    }
+
+    hbitmap
+  }
+
+  pub fn load (path_str: &str) -> Option<Image> {
+    use image::GenericImage;
+
+    let path = ::std::path::Path::new(path_str);
+    match ::image::open(path) {
+      Err(_) => None,
+      Ok(img) => {
+        let hbitmap = Image::make_hbitmap(&img);
+        if hbitmap.is_null() { None }
+        else {
+          let (width, height) = img.dimensions();
+          Some( Image {
+            width: width,
+            height: height,
+            hbm: hbitmap,
+            img: img,
+          } )
+        }
+      }
+    }
   }
 }
 

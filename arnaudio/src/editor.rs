@@ -21,11 +21,13 @@ impl Editor {
 struct EditorWindow {
   width: u32,
   height: u32,
+  img: ::graphics::Image,
 }
 
 impl ::graphics::Window for EditorWindow {
   fn get_size (&self) -> (u32, u32) { (self.width, self.height) }
   fn paint (&self, canvas: &mut ::graphics::Canvas) {
+    canvas.fill_image((0,0), &self.img);
     canvas.fill_rect((20,20), (80,60), ::graphics::Color::hex(0x77ccff));
   }
   fn input (&mut self, ev: ::graphics::InputEvent) {}
@@ -46,6 +48,7 @@ impl VstEditor for Editor {
     let window = EditorWindow{
       width: self.width,
       height: self.height,
+      img: ::graphics::Image::load("cpu.png").unwrap()
     };
     ::graphics::register_window(window, ptr as *mut ::std::os::raw::c_void);
     self.isopen = true;

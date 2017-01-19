@@ -27,8 +27,7 @@ impl Color {
 pub trait Canvas {
   fn fill_image (&mut self,
     source_pos: (u32, u32),
-    dest_pos: (u32, u32),
-    size: (u32,u32)
+    img: &Image
   );
 
   fn fill_rect(&mut self,
@@ -47,4 +46,4 @@ pub trait Window {
 }
 
 #[cfg(windows)]
-pub use self::windows::register_window;
+pub use self::windows::{register_window, Image};

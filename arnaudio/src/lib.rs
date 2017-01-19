@@ -2,6 +2,7 @@
 extern crate vst2;
 
 extern crate libc;
+extern crate image;
 
 extern crate winapi;
 extern crate user32;
