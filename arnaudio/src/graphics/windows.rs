@@ -7,7 +7,7 @@ use graphics::*;
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-struct WinCanvas {
+pub struct Canvas {
   hdc: ::winapi::windef::HDC
 }
 
@@ -22,8 +22,8 @@ fn print_win_err (msg: &str) {
   printerr!("[{}] {} Fail: {:?}", file!(), msg, ::std::io::Error::last_os_error());
 }
 
-impl Canvas for WinCanvas {
-  fn fill_image (&mut self,
+impl Canvas {
+  pub fn fill_image (&mut self,
     pos: (u32, u32),
     img: &Image
   ) {
@@ -51,7 +51,7 @@ impl Canvas for WinCanvas {
     }
   }
 
-  fn fill_rect(&mut self,
+  pub fn fill_rect(&mut self,
     pos: (u32, u32),
     size: (u32, u32),
     color: Color
@@ -173,7 +173,7 @@ unsafe fn paint_proc (hwnd: ::winapi::windef::HWND, window: &mut Window) {
   if hdc.is_null() {
     print_win_err("Begin Paint at paint_proc");
   } else {
-    let mut canvas = WinCanvas{
+    let mut canvas = Canvas {
       hdc: hdc
     };
 
@@ -324,11 +324,13 @@ impl Image {
         ::std::slice::from_raw_parts_mut(ptr, len)
       };
 
+      // Windows va de abajo hacia arriba
       for y in 0..height {
         for x in 0..width {
           let i = ((y*width + x)*4) as usize;
 
-          let (r,g,b,a) = img.get_pixel(x,y).channels4();
+          // Aquí tengo que invertir y
+          let (r,g,b,a) = img.get_pixel(x,height-(y+1)).channels4();
 
           pixels[i+0] = r;
           pixels[i+1] = g;
@@ -361,6 +363,12 @@ impl Image {
         }
       }
     }
+  }
+}
+
+impl Drop for Image {
+  fn drop (&mut self) {
+    unsafe { ::gdi32::DeleteObject(self.hbm as *mut c_void) };
   }
 }
 

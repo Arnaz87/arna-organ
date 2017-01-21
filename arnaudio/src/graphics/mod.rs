@@ -24,19 +24,6 @@ impl Color {
   }
 }
 
-pub trait Canvas {
-  fn fill_image (&mut self,
-    source_pos: (u32, u32),
-    img: &Image
-  );
-
-  fn fill_rect(&mut self,
-    pos: (u32, u32),
-    size: (u32, u32),
-    color: Color
-  );
-}
-
 pub enum InputEvent {}
 
 pub trait Window {
@@ -46,4 +33,4 @@ pub trait Window {
 }
 
 #[cfg(windows)]
-pub use self::windows::{register_window, Image};
+pub use self::windows::{register_window, Image, Canvas};
