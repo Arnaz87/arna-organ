@@ -1,3 +1,13 @@
+
+extern crate image;
+
+extern crate winapi;
+extern crate user32;
+extern crate gdi32;
+
+#[macro_use]
+extern crate lazy_static;
+
 #[cfg(windows)]
 mod windows;
 

@@ -1,0 +1,16 @@
+[package]
+name = "gui"
+version = "0.1.0"
+authors = ["Arnaud Castellanos Galea <poderosoarnaud@gmail.com>"]
+
+[lib]
+name = "gui"
+
+[dependencies]
+image = "*"
+
+winapi = "0.2"
+user32-sys = "0.2"
+gdi32-sys = "0.2"
+
+lazy_static = "0.1"

@@ -1,21 +1,14 @@
 
 extern crate vst2;
-
 extern crate libc;
-extern crate image;
 
-extern crate winapi;
-extern crate user32;
-extern crate gdi32;
+pub extern crate gui;
 
-#[macro_use]
-extern crate lazy_static;
-
-pub mod graphics;
 pub mod synth;
 pub mod voice;
 pub mod editor;
 
+//pub use gui;
 pub use vst2::{main as vstmain, api as vstapi};
 
 // Esto es básicamente copiado del código de vst2, de plugin_main!.

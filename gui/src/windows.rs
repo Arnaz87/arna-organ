@@ -3,7 +3,9 @@ use winapi::windef::HWND;
 use winapi::minwindef::HINSTANCE;
 use std::io::Write;
 
-use graphics::*;
+//use graphics::*;
+use Color;
+use Window;
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
