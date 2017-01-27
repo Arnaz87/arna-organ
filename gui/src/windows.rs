@@ -3,11 +3,13 @@ use winapi::windef::HWND;
 use winapi::minwindef::HINSTANCE;
 use std::io::Write;
 
+use winapi;
+
 //use graphics::*;
 use Color;
 use Window;
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 pub struct Canvas {
   hdc: ::winapi::windef::HDC
@@ -29,22 +31,27 @@ impl Canvas {
     pos: (u32, u32),
     img: &Image
   ) {
-
     use gdi32::{CreateCompatibleDC, SelectObject, BitBlt, DeleteDC};
-    use std::os::raw::{c_void, c_int};
+    use std::os::raw::{c_int};
 
     unsafe {
+      let hbm = img.winbm.get_hbitmap();
       let mem_hdc = CreateCompatibleDC(self.hdc);
-      let old_hbm = SelectObject(mem_hdc, img.hbm as ::winapi::windef::HGDIOBJ);
+      let old_hbm = SelectObject(mem_hdc, hbm as ::winapi::windef::HGDIOBJ);
+      
+      let (x, y, w, h) = img.area;
 
       let result = BitBlt(
         self.hdc,
+        // Dest x y
         pos.0 as c_int,
         pos.1 as c_int,
-        img.width as c_int,
-        img.height as c_int,
+        // width height
+        w as c_int,
+        h as c_int,
         mem_hdc,
-        0, 0, // Source x y
+        // Src x y
+        x, y,
         ::winapi::wingdi::SRCCOPY
       );
 
@@ -90,24 +97,6 @@ fn to_wstring(str : &str) -> Vec<u16> {
   OsStr::new(str).encode_wide().chain(Some(0).into_iter()).collect()
 }
 
-unsafe fn get_window<'a> (hwnd: ::winapi::windef::HWND) -> Option<MutexGuard<'a, Window>> {
-  // Windows me garantiza que al principio, esto va a ser null
-  // y cuando yo lo termine de usar, también lo pondré null
-
-  let long = ::user32::GetWindowLongW(hwnd, ::winapi::winuser::GWLP_USERDATA);
-
-  match (long as *mut Arc<Mutex<Window>>).as_mut() {
-    None => {
-      printerr!("No graphics::Window asociated with current HWND");
-      None
-    },
-    Some(winarc) => match winarc.lock() {
-      Ok(win) => Some(win),
-      Err(_) => None,
-    }
-  }
-}
-
 unsafe extern "system" fn window_proc(
   hwnd:    ::winapi::windef::HWND, 
   msg:     ::winapi::minwindef::UINT,
@@ -117,7 +106,47 @@ unsafe extern "system" fn window_proc(
 {
   use winapi::winuser::{
     WM_CREATE, WM_PAINT, WM_DESTROY,
+    WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_RBUTTONDOWN, WM_RBUTTONUP,
+    WM_MBUTTONDOWN, WM_MBUTTONUP,
+    WM_MOUSEMOVE,
   };
+
+  // Trata de obtener la ventana asociada a ese HWND, si no puede imprime el
+  // error y continúa normal.
+  macro_rules! get_window {
+    ($w:ident, $b:block) => {
+      // Windows me garantiza que al principio, esto va a ser null
+      // y cuando yo lo termine de usar, también lo pondré null
+      let long = ::user32::GetWindowLongW(hwnd, ::winapi::winuser::GWLP_USERDATA);
+
+      match (long as *mut Arc<Mutex<Window>>).as_mut() {
+        None => printerr!("No graphics::Window asociated with current HWND"),
+        Some(winarc) => match winarc.lock() {
+          Err(_) => printerr!("Couldn't lock Window Mutex"),
+          Ok(mut guard) => {
+            let $w: &mut Window = &mut *guard;
+            $b
+          },
+        }
+      }
+    }
+  }
+
+  macro_rules! mouse_ev {
+    ($ev:ident, $btn:ident) => {
+      get_window!(win, {
+        win.event(::Event::$ev(::MouseBtn::$btn));
+      });
+    };
+    ($ev:ident) => {
+      let x = winapi::windowsx::GET_X_LPARAM(l_param) as i32;
+      let y = winapi::windowsx::GET_Y_LPARAM(l_param) as i32;
+      get_window!(win, {
+        win.event(::Event::$ev(x, y));
+      });
+    };
+  }
 
   match msg {
 
@@ -150,13 +179,23 @@ unsafe extern "system" fn window_proc(
     },
 
     WM_PAINT => {
-      match get_window(hwnd) {
-        None => println!("No Window to paint"),
-        Some(mut win) => {
-          paint_proc(hwnd, &mut *win);
-        }
-      }
+      get_window!(win, {
+        paint_proc(hwnd, win);
+      });
     },
+
+    // Mensajes del Mouse
+
+    WM_LBUTTONDOWN => { mouse_ev!(MouseDown, L); },
+    WM_LBUTTONUP => { mouse_ev!(MouseUp, L); },
+
+    WM_RBUTTONDOWN => { mouse_ev!(MouseDown, R); },
+    WM_RBUTTONUP => { mouse_ev!(MouseUp, R); },
+
+    WM_MBUTTONDOWN => { mouse_ev!(MouseDown, M); },
+    WM_MBUTTONUP => { mouse_ev!(MouseUp, M); },
+
+    WM_MOUSEMOVE => { mouse_ev!(MouseMove); },
 
     //TODO: Mensajes de IO
     _ => {}
@@ -183,7 +222,6 @@ unsafe fn paint_proc (hwnd: ::winapi::windef::HWND, window: &mut Window) {
 
     ::user32::EndPaint(hwnd, &mut ps);
   }
-
 }
 
 fn register_class () {
@@ -264,11 +302,27 @@ fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) {
   }
 }
 
+struct WinBitmap { hbitmap: ::winapi::windef::HBITMAP }
+impl WinBitmap {
+  fn new (hbm: ::winapi::windef::HBITMAP) -> WinBitmap {
+    WinBitmap { hbitmap: hbm }
+  }
+  fn get_hbitmap (&self) -> ::winapi::windef::HBITMAP {
+    self.hbitmap
+  }
+}
+impl Drop for WinBitmap {
+  fn drop (&mut self) {
+    unsafe { ::gdi32::DeleteObject(self.hbitmap as *mut c_void) };
+  }
+}
+
 pub struct Image {
-  width: u32,
-  height: u32,
-  hbm: ::winapi::windef::HBITMAP,
-  img: ::image::DynamicImage
+  pub width: u32,
+  pub height: u32,
+  winbm: ::std::rc::Rc<WinBitmap>,
+  area: (i32, i32, i32, i32),
+  //img: ::image::DynamicImage
 }
 
 impl Image {
@@ -347,6 +401,7 @@ impl Image {
 
   pub fn load (path_str: &str) -> Option<Image> {
     use image::GenericImage;
+    use winapi::windef::POINT;
 
     let path = ::std::path::Path::new(path_str);
     match ::image::open(path) {
@@ -359,18 +414,36 @@ impl Image {
           Some( Image {
             width: width,
             height: height,
-            hbm: hbitmap,
-            img: img,
+            winbm: ::std::rc::Rc::new(WinBitmap::new(hbitmap)),
+            area: (0, 0, width as i32, height as i32)
+            //img: img,
           } )
         }
       }
     }
   }
+
+  /// Rota la imagen con centro en el centro medio de la imagen (1 vuelta = 360°)
+  pub fn rotate (mut self, angle: f32) -> Self {
+    printerr!("Warning: Image Rotation not yet implemented.");
+    self
+  }
+
+  pub fn crop (mut self, x: i32, y: i32, w: i32, h: i32) -> Self {
+    let (_x, _y, _w, _h) = self.area;
+    self.area = ( _x+x, _y+y, w, h, );
+    self
+  }
 }
 
-impl Drop for Image {
-  fn drop (&mut self) {
-    unsafe { ::gdi32::DeleteObject(self.hbm as *mut c_void) };
+impl Clone for Image {
+  fn clone (&self) -> Image {
+    Image {
+      width: self.width,
+      height: self.height,
+      winbm: self.winbm.clone(),
+      area: self.area.clone(),
+    }
   }
 }
 
