@@ -51,7 +51,7 @@ impl MyKnob {
       value: 0.0,
       control: ::gui::widget::SliderControl::new(32, 32),
       painter: ::gui::widget::SeqPaint::new(
-        ::gui::Image::load("cknob.bmp").unwrap(),
+        ::gui::Image::load("cknob.png").unwrap(),
         44, // height
         40, // count
       ),

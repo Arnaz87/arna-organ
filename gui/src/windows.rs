@@ -31,7 +31,7 @@ impl Canvas {
     pos: (u32, u32),
     img: &Image
   ) {
-    use gdi32::{CreateCompatibleDC, SelectObject, BitBlt, DeleteDC};
+    use gdi32::{CreateCompatibleDC, SelectObject, BitBlt, DeleteDC, GdiAlphaBlend};
     use std::os::raw::{c_int};
 
     unsafe {
@@ -41,19 +41,36 @@ impl Canvas {
       
       let (x, y, w, h) = img.area;
 
-      let result = BitBlt(
+      // Estas constantes no están en winapi.rs
+
+      // wine wingdi.h line 1996
+      // #define AC_SRC_OVER  0x00
+      // #define AC_SRC_ALPHA 0x01
+      let AC_SRC_OVER = 0;
+      let AC_SRC_ALPHA = 1;
+
+      let result = GdiAlphaBlend(
+        // Dest
         self.hdc,
-        // Dest x y
         pos.0 as c_int,
         pos.1 as c_int,
-        // width height
-        w as c_int,
-        h as c_int,
+        w, h,
+
+        // Src
         mem_hdc,
-        // Src x y
-        x, y,
-        ::winapi::wingdi::SRCCOPY
+        x, y, w, h,
+
+        ::winapi::wingdi::BLENDFUNCTION{
+          BlendOp: AC_SRC_OVER,
+          BlendFlags: 0,
+          SourceConstantAlpha: 255,
+          AlphaFormat: AC_SRC_ALPHA,
+        }
       );
+
+      if result==0 {
+        print_win_err("AlphaBlend at fill_image");
+      }
 
       SelectObject(mem_hdc, old_hbm);
       DeleteDC(mem_hdc);
@@ -85,7 +102,7 @@ impl Canvas {
   }
 }
 
-// Nota: Esto no es Thread Safe, me ladilló hacerlo así
+// Nota: Esto no es Thread Safe, me ladilló hacerlo seguro
 static mut CLASS_USERS: u32 = 0;
 lazy_static!{
   static ref W_CLASS_NAME: Vec<u16> = to_wstring("MyWindowClass");
@@ -385,12 +402,17 @@ impl Image {
         for x in 0..width {
           let i = ((y*width + x)*4) as usize;
 
-          // Aquí tengo que invertir y
+          // Aquí tengo que invertir 'y'
           let (r,g,b,a) = img.get_pixel(x,height-(y+1)).channels4();
 
-          pixels[i+0] = r;
-          pixels[i+1] = g;
-          pixels[i+2] = b;
+          macro_rules! premul {
+            ($a:expr, $b:expr) => ( (($a as u16*$b as u16) / 255) as u8 )
+          }
+
+          // Windows usa alfa premultiplicado
+          pixels[i+0] = premul!(r, a);
+          pixels[i+1] = premul!(g, a);
+          pixels[i+2] = premul!(b, a);
           pixels[i+3] = a;
         }
       }
