@@ -114,6 +114,14 @@ fn to_wstring(str : &str) -> Vec<u16> {
   OsStr::new(str).encode_wide().chain(Some(0).into_iter()).collect()
 }
 
+fn repaint (hwnd: ::winapi::windef::HWND) {
+  unsafe {
+    ::user32::InvalidateRect(
+      hwnd, ::std::ptr::null(), 0 as ::winapi::minwindef::BOOL
+    );
+  }
+}
+
 unsafe extern "system" fn window_proc(
   hwnd:    ::winapi::windef::HWND, 
   msg:     ::winapi::minwindef::UINT,
@@ -161,6 +169,7 @@ unsafe extern "system" fn window_proc(
       let y = winapi::windowsx::GET_Y_LPARAM(l_param) as i32;
       get_window!(win, {
         win.event(::Event::$ev(x, y));
+        if win.is_invalid() { repaint(hwnd) }
       });
     };
   }

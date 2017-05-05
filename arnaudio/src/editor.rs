@@ -18,7 +18,7 @@ impl Editor {
   }
 }
 
-struct EditorWindow {
+/*struct EditorWindow {
   width: u32,
   height: u32,
   img: ::gui::Image,
@@ -31,16 +31,18 @@ impl ::gui::Window for EditorWindow {
     canvas.fill_rect((20,20), (80,60), ::gui::Color::hex(0x77ccff));
   }
   fn event (&mut self, ev: ::gui::Event) {}
+  //fn is_invalid (&self) -> bool {}
 }
 
 impl Drop for EditorWindow {
   fn drop (&mut self) {
     println!("Dropping Editor Window");
   }
-}
+}*/
 
 struct MyKnob {
   value: f32,
+  changed: bool,
   control: ::gui::widget::SliderControl,
   painter: ::gui::widget::SeqPaint,
 }
@@ -49,6 +51,7 @@ impl MyKnob {
   pub fn new () -> MyKnob {
     MyKnob {
       value: 0.0,
+      changed: true,
       control: ::gui::widget::SliderControl::new(32, 32),
       painter: ::gui::widget::SeqPaint::new(
         ::gui::Image::load("cknob.png").unwrap(),
@@ -74,6 +77,7 @@ impl ::gui::widget::Widget for MyKnob {
       println!("{}", new_val);
     }
   }
+  fn is_invalid (&self) -> bool { self.changed }
 }
 
 impl VstEditor for Editor {

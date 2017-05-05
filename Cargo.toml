@@ -2,6 +2,7 @@
 name = "organ"
 version = "0.1.0"
 authors = ["Arnaud Castellanos Galea <poderosoarnaud@gmail.com>"]
+build = "build.rs"
 
 [lib]
 name = "organ"

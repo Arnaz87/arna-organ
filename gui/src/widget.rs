@@ -8,6 +8,9 @@ pub trait Widget {
   fn paint (&self, canvas: &mut ::Canvas);
 
   fn event (&mut self, ev: ::Event);
+
+  /// Indica si el widget cambió y debe ser pintado otra vez
+  fn is_invalid (&self) -> bool;
 }
 
 /// Un grupo de widgets
@@ -34,6 +37,10 @@ impl Widget for Group {
       widget.event(ev);
     }
   }
+
+  fn is_invalid (&self) -> bool {
+    self.children.iter().any(|w| w.is_invalid())
+  }
 }
 
 pub struct Window {
@@ -45,6 +52,7 @@ impl ::Window for Window {
   fn get_size (&self) -> (u32, u32) { self.size }
   fn paint(&self, canvas: &mut ::Canvas) { self.main.paint(canvas) }
   fn event(&mut self, ev: ::Event) { self.main.event(ev) }
+  fn is_invalid(&self) -> bool { self.main.is_invalid() }
 }
 
 pub struct SliderControl {
@@ -79,7 +87,7 @@ impl SliderControl {
           // Cuanto se ha movido el mouse en y en píxeles
           let ydif = -(y - self.mouse_y);
 
-          // Cuánto se ha mivodo relativo a su tamaño, en 0..1
+          // Cuánto se ha movido relativo a su tamaño, en 0..1
           let yrel = (ydif as f32) / (self.h as f32);
 
           // y va hacia abajo, pero necesitamos la distancia hacia arriba,
