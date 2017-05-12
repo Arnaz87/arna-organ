@@ -10,6 +10,8 @@ use Color;
 use Window;
 
 use std::sync::{Arc, Mutex};
+use std::cell::{Cell, RefCell};
+use std::borrow::BorrowMut;
 
 pub struct Canvas {
   hdc: ::winapi::windef::HDC
@@ -102,7 +104,7 @@ impl Canvas {
   }
 }
 
-// Nota: Esto no es Thread Safe, me ladilló hacerlo seguro
+// Nota: Esto no es Thread Safe, me fastidió hacerlo así
 static mut CLASS_USERS: u32 = 0;
 lazy_static!{
   static ref W_CLASS_NAME: Vec<u16> = to_wstring("MyWindowClass");
@@ -169,7 +171,7 @@ unsafe extern "system" fn window_proc(
       let y = winapi::windowsx::GET_Y_LPARAM(l_param) as i32;
       get_window!(win, {
         win.event(::Event::$ev(x, y));
-        if win.is_invalid() { repaint(hwnd) }
+        repaint(hwnd);
       });
     };
   }
@@ -298,7 +300,7 @@ fn unregister_class () {
   }
 }
 
-fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) {
+fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) -> HWND {
 
   let (width, height) = {
     let win = win_arc.lock().unwrap();
@@ -320,12 +322,19 @@ fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) {
     syswnd,
     0 as ::winapi::windef::HMENU,
     0 as HINSTANCE,
-    winbox_ptr as *mut c_void
+    ::std::ptr::null_mut()
+    //winbox_ptr as *mut c_void
   ) };
+
+  // Debo usar esto para poder usar el hwnd para crear la ventana, y luego sí
+  // asignal la ventana creada a este hwnd
+  //SetWindowLongPtr ((HWND)pHwnd, GWLP_USERDATA, (__int3264)(LONG_PTR)this);
 
   if hwnd.is_null() {
     print_win_err("Create Window at make_window");
   }
+
+  hwnd
 }
 
 struct WinBitmap { hbitmap: ::winapi::windef::HBITMAP }
@@ -478,9 +487,117 @@ impl Clone for Image {
   }
 }
 
-pub fn register_window<W: Window + 'static> (win: W, ptr: *mut c_void) -> Arc<Mutex<Window>> {
-  register_class();
-  let data: Arc<Mutex<Window>> = Arc::new(Mutex::new(win));
-  make_window(data.clone(), ptr as HWND);
-  data.clone()
+struct HandlerBox {
+  // Handler debe ser immutable y Sync
+
+  // Option<Arc<Mutex<T>>> Simula un puntero a un T mutable concurrente que
+  // puede ser null. Pero necesito poder cambiar el puntero de Window y
+  // Handler debe ser immutable, así que lo encierro en un Cell, pero al
+  // mismo tiempo debe ser Sync para poder compartirse en threads, por lo
+  // que también lo encierro en un RwLock.
+
+  // No puedo usar Cell porque Arc no es copy...
+  // debo usar RefCell y clonarlo manualmente
+  winmutex: Mutex<Option<Arc<Mutex<Window>>>>,
+  hwndmutex: Mutex<HWND>
+}
+
+#[derive(Clone)]
+pub struct Handler {
+  bx: Arc<HandlerBox>
+}
+
+impl Handler {
+  pub fn new () -> Handler {
+    Handler {
+      bx: Arc::new(HandlerBox {
+        winmutex: Mutex::new(None),
+        hwndmutex: Mutex::new(0 as HWND)
+      })
+    }
+  }
+
+  fn hwnd (&self) -> HWND {
+    *self.bx.hwndmutex.lock().unwrap()
+  }
+
+  pub fn is_open (&self) -> bool { !self.hwnd().is_null() }
+
+  pub fn open (&self, ptr: *mut c_void, width: i32, height: i32) {
+    if self.is_open() { return; }
+
+    register_class();
+
+    let syswnd = ptr as HWND;
+
+    let hwnd = unsafe { ::user32::CreateWindowExW(
+      0,
+      W_CLASS_NAME.as_ptr(),
+      to_wstring("Window").as_ptr(),
+      {
+        use winapi::winuser::*;
+        WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS
+      },
+      0, 0, width as i32, height as i32,
+      syswnd,
+      0 as ::winapi::windef::HMENU,
+      0 as HINSTANCE,
+      ::std::ptr::null_mut()
+      //winbox_ptr as *mut c_void
+    ) };
+
+    if hwnd.is_null() {
+      print_win_err("Create Window at HandlerBox.open");
+      return;
+    }
+
+    *self.bx.hwndmutex.lock().unwrap() = hwnd;
+    self.attach_impl();
+  }
+
+  pub fn close (&self) {}
+
+  pub fn repaint (&self) {
+    unsafe {
+      ::user32::InvalidateRect(
+        self.hwnd(), ::std::ptr::null(), 0 as ::winapi::minwindef::BOOL
+      );
+    }
+  }
+
+  pub fn capture (&self) {
+    unsafe {
+      ::user32::SetCapture(self.hwnd());
+    }
+  }
+
+  pub fn release (&self) {
+    unsafe {
+      ::user32::ReleaseCapture();
+    }
+  }
+
+  pub fn attach_impl (&self) {
+    // No entiendo bien esta parte
+    match *self.bx.winmutex.lock().unwrap() {
+      Some(ref win_arc) => {
+        let win_ptr = Box::into_raw(Box::new(win_arc.clone()));
+        unsafe {
+          // Debería ser SetWindowLongPtrW
+          ::user32::SetWindowLongW(
+            self.hwnd(),
+            ::winapi::winuser::GWLP_USERDATA,
+            win_ptr as ::winapi::winnt::LONG
+          );
+        }
+      },
+      None => {}
+    }
+  }
+
+  pub fn attach <W: Window + 'static> (&self, win: W) {
+    let winx = Arc::new(Mutex::new(win));
+    *self.bx.winmutex.lock().unwrap() = Some(winx);
+    self.attach_impl();
+  }
 }

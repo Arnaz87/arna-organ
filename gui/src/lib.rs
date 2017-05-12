@@ -61,9 +61,7 @@ pub trait Window {
   /// Recibe eventos y puede cambiar el estado de la ventana
   /// y del programa en base a ellos.
   fn event (&mut self, ev: Event);
-
-  fn is_invalid (&self) -> bool;
 }
 
 #[cfg(windows)]
-pub use self::windows::{register_window, Image, Canvas};
+pub use self::windows::{Image, Canvas, Handler};
