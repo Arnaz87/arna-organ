@@ -71,34 +71,6 @@ pub struct SynthPlugin<T: Synth> {
   editor: Editor,
 }
 
-impl<T: Synth> Default for SynthPlugin<T> {
-  fn default () -> SynthPlugin<T> {
-    let info = T::get_info();
-    let mut synth = T::new();
-
-    let arch = Architecture{sample_rate: 44000_f32};
-
-    synth.arch_change(arch);
-
-    let mut params = vec![0_f32; info.params];
-    for i in 0..(info.params-1) {
-      let value = T::param_default(i);
-      synth.set_param(i, value);
-      params[i] = value;
-    }
-
-    let editor = Editor::new();
-
-    SynthPlugin{
-      synth: synth,
-      params: params,
-      events: Vec::new(),
-      arch: arch,
-      editor: editor,
-    }
-  }
-}
-
 impl<T: Synth> Plugin for SynthPlugin<T> {
   fn get_info(&self) -> VstInfo {
     let sinf = T::get_info();
@@ -124,8 +96,30 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
     }
   }
 
-  fn new (_: HostCallback) -> SynthPlugin<T> {
-    Default::default()
+  fn new (host: HostCallback) -> SynthPlugin<T> {
+    let info = T::get_info();
+    let mut synth = T::new();
+
+    let arch = Architecture{sample_rate: 44000_f32};
+
+    synth.arch_change(arch);
+
+    let mut params = vec![0_f32; info.params];
+    for i in 0..(info.params-1) {
+      let value = T::param_default(i);
+      synth.set_param(i, value);
+      params[i] = value;
+    }
+
+    let editor = Editor::new(host);
+
+    SynthPlugin{
+      synth: synth,
+      params: params,
+      events: Vec::new(),
+      arch: arch,
+      editor: editor,
+    }
   }
 
   fn can_be_automated(&self, _: i32) -> bool { true }
@@ -209,5 +203,11 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
 
   fn get_editor (&mut self) -> Option<&mut VstEditor> {
     Some(&mut self.editor)
+  }
+}
+
+impl<T: Synth> Default for SynthPlugin<T> {
+  fn default () -> SynthPlugin<T> {
+    SynthPlugin::new(Default::default())
   }
 }

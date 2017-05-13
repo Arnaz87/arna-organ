@@ -7,7 +7,7 @@ use winapi;
 
 //use graphics::*;
 use Color;
-use Window;
+use Component;
 
 use std::sync::{Arc, Mutex};
 use std::cell::{Cell, RefCell};
@@ -107,7 +107,7 @@ impl Canvas {
 // Nota: Esto no es Thread Safe, me fastidió hacerlo así
 static mut CLASS_USERS: u32 = 0;
 lazy_static!{
-  static ref W_CLASS_NAME: Vec<u16> = to_wstring("MyWindowClass");
+  static ref W_CLASS_NAME: Vec<u16> = to_wstring("MyComponentClass");
 }
 
 fn to_wstring(str : &str) -> Vec<u16> {
@@ -147,12 +147,12 @@ unsafe extern "system" fn window_proc(
       // y cuando yo lo termine de usar, también lo pondré null
       let long = ::user32::GetWindowLongW(hwnd, ::winapi::winuser::GWLP_USERDATA);
 
-      match (long as *mut Arc<Mutex<Window>>).as_mut() {
+      match (long as *mut Arc<Mutex<Component>>).as_mut() {
         None => printerr!("No graphics::Window asociated with current HWND"),
         Some(winarc) => match winarc.lock() {
           Err(_) => printerr!("Couldn't lock Window Mutex"),
           Ok(mut guard) => {
-            let $w: &mut Window = &mut *guard;
+            let $w: &mut Component = &mut *guard;
             $b
           },
         }
@@ -182,7 +182,7 @@ unsafe extern "system" fn window_proc(
       println!("Window Created");
       let lpcs = l_param as ::winapi::winuser::LPCREATESTRUCTW;
 
-      let wbx_ptr = (*lpcs).lpCreateParams as *mut Arc<Mutex<Window>>;
+      let wbx_ptr = (*lpcs).lpCreateParams as *mut Arc<Mutex<Component>>;
 
       // Debería ser SetWindowLongPtrW, pero no existe en el crate
       ::user32::SetWindowLongW(hwnd,
@@ -198,7 +198,7 @@ unsafe extern "system" fn window_proc(
 
       // Recuperar la caja. Cuando salga de contexto, la caja se elimina y
       // elimina la referencia que está usando en el Arc.
-      let win_box = Box::from_raw(long as *mut Arc<Mutex<Window>>);
+      let win_box = Box::from_raw(long as *mut Arc<Mutex<Component>>);
 
       ::user32::SetWindowLongW(hwnd,
         ::winapi::winuser::GWLP_USERDATA,
@@ -233,7 +233,7 @@ unsafe extern "system" fn window_proc(
 }
 
 #[allow(unused_variables)]
-unsafe fn paint_proc (hwnd: ::winapi::windef::HWND, window: &mut Window) {
+unsafe fn paint_proc (hwnd: ::winapi::windef::HWND, window: &mut Component) {
   use winapi::winuser::PAINTSTRUCT;
 
   let mut ps: PAINTSTRUCT = ::std::mem::zeroed();
@@ -300,7 +300,7 @@ fn unregister_class () {
   }
 }
 
-fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) -> HWND {
+/*fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) -> HWND {
 
   let (width, height) = {
     let win = win_arc.lock().unwrap();
@@ -335,7 +335,7 @@ fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) -> HWND {
   }
 
   hwnd
-}
+}*/
 
 struct WinBitmap { hbitmap: ::winapi::windef::HBITMAP }
 impl WinBitmap {
@@ -487,44 +487,35 @@ impl Clone for Image {
   }
 }
 
-struct HandlerBox {
-  // Handler debe ser immutable y Sync
+pub struct HandlerBox {
+  // Debe ser immutable y Sync
 
   // Option<Arc<Mutex<T>>> Simula un puntero a un T mutable concurrente que
   // puede ser null. Pero necesito poder cambiar el puntero de Window y
-  // Handler debe ser immutable, así que lo encierro en un Cell, pero al
-  // mismo tiempo debe ser Sync para poder compartirse en threads, por lo
-  // que también lo encierro en un RwLock.
+  // Handler debe ser immutable, así que lo encierraría en un Cell, pero al
+  // mismo tiempo debe ser Sync para poder compartirse en threads, así que
+  // en cambio lo encierro en un Mutex, que funciona como un RefCell.
 
-  // No puedo usar Cell porque Arc no es copy...
-  // debo usar RefCell y clonarlo manualmente
-  winmutex: Mutex<Option<Arc<Mutex<Window>>>>,
-  hwndmutex: Mutex<HWND>
+  // Creo que aquí hay un leak, porque Window tiene un Handler.
+  win: Option<Arc<Mutex<Component>>>,
+  hwnd: HWND,
+  width: i32,
+  height: i32,
 }
 
-#[derive(Clone)]
-pub struct Handler {
-  bx: Arc<HandlerBox>
-}
-
-impl Handler {
-  pub fn new () -> Handler {
-    Handler {
-      bx: Arc::new(HandlerBox {
-        winmutex: Mutex::new(None),
-        hwndmutex: Mutex::new(0 as HWND)
-      })
+impl HandlerBox {
+  pub fn new () -> HandlerBox {
+    HandlerBox {
+      win: None,
+      hwnd: 0 as HWND,
+      width: 0,
+      height: 0,
     }
   }
 
-  fn hwnd (&self) -> HWND {
-    *self.bx.hwndmutex.lock().unwrap()
-  }
-
-  pub fn is_open (&self) -> bool { !self.hwnd().is_null() }
-
-  pub fn open (&self, ptr: *mut c_void, width: i32, height: i32) {
-    if self.is_open() { return; }
+  pub fn open (&mut self, ptr: *mut c_void) {
+    // Already open
+    if !self.hwnd.is_null() { return; }
 
     register_class();
 
@@ -538,7 +529,7 @@ impl Handler {
         use winapi::winuser::*;
         WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS
       },
-      0, 0, width as i32, height as i32,
+      0, 0, self.width, self.height,
       syswnd,
       0 as ::winapi::windef::HMENU,
       0 as HINSTANCE,
@@ -547,27 +538,34 @@ impl Handler {
     ) };
 
     if hwnd.is_null() {
-      print_win_err("Create Window at HandlerBox.open");
+      print_win_err("Create Window at Handler.open");
       return;
     }
 
-    *self.bx.hwndmutex.lock().unwrap() = hwnd;
+    self.hwnd = hwnd;
     self.attach_impl();
   }
 
-  pub fn close (&self) {}
+  pub fn close (&mut self) {
+    let result = unsafe { ::user32::DestroyWindow(self.hwnd) };
+    if result == 0 {
+      print_win_err("Destroy Window at Handler.close");
+    } else {
+      self.hwnd = 0 as HWND;
+    }
+  }
 
   pub fn repaint (&self) {
     unsafe {
       ::user32::InvalidateRect(
-        self.hwnd(), ::std::ptr::null(), 0 as ::winapi::minwindef::BOOL
+        self.hwnd, ::std::ptr::null(), 0 as ::winapi::minwindef::BOOL
       );
     }
   }
 
   pub fn capture (&self) {
     unsafe {
-      ::user32::SetCapture(self.hwnd());
+      ::user32::SetCapture(self.hwnd);
     }
   }
 
@@ -577,15 +575,20 @@ impl Handler {
     }
   }
 
-  pub fn attach_impl (&self) {
+  pub fn set_size (&mut self, w: u32, h: u32) {
+    self.width = w as i32;
+    self.height = h as i32;
+  }
+
+  fn attach_impl (&mut self) {
     // No entiendo bien esta parte
-    match *self.bx.winmutex.lock().unwrap() {
+    match self.win {
       Some(ref win_arc) => {
         let win_ptr = Box::into_raw(Box::new(win_arc.clone()));
         unsafe {
           // Debería ser SetWindowLongPtrW
           ::user32::SetWindowLongW(
-            self.hwnd(),
+            self.hwnd,
             ::winapi::winuser::GWLP_USERDATA,
             win_ptr as ::winapi::winnt::LONG
           );
@@ -595,9 +598,9 @@ impl Handler {
     }
   }
 
-  pub fn attach <W: Window + 'static> (&self, win: W) {
+  pub fn attach <W: Component + 'static> (&mut self, win: W) {
     let winx = Arc::new(Mutex::new(win));
-    *self.bx.winmutex.lock().unwrap() = Some(winx);
+    self.win = Some(winx);
     self.attach_impl();
   }
 }

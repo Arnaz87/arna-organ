@@ -8,6 +8,8 @@ extern crate gdi32;
 #[macro_use]
 extern crate lazy_static;
 
+use std::sync::{Arc, Mutex, MutexGuard};
+
 #[cfg(windows)]
 mod windows;
 
@@ -49,19 +51,46 @@ pub enum Event {
   MouseDown(MouseBtn),
 }
 
-/// Una ventana (o sección de una) que se muestra en la pantalla y responde a eventos.
-pub trait Window {
-  /// El tamaño que ocupa esta ventana en la pantalla en píxeles.
-  fn get_size (&self) -> (u32, u32);
+pub trait Component {
+  /// Recibe eventos y puede cambiar el estado de la ventana
+  /// y del programa en base a ellos.
+  fn event (&mut self, ev: Event);
 
   /// Recibe un Canvas que representa la sección visible de esta ventana,
   /// y pinta el contenido de la ventana sobre él.
   fn paint (&self, ctx: &mut Canvas);
-
-  /// Recibe eventos y puede cambiar el estado de la ventana
-  /// y del programa en base a ellos.
-  fn event (&mut self, ev: Event);
 }
 
 #[cfg(windows)]
-pub use self::windows::{Image, Canvas, Handler};
+pub use self::windows::{Image, Canvas};
+
+#[cfg(windows)]
+use self::windows::HandlerBox;
+
+#[derive(Clone)]
+pub struct Handler {
+  bx: Arc<Mutex<HandlerBox>>
+}
+
+impl Handler {
+  pub fn new () -> Handler {
+    Handler{
+      bx: Arc::new(Mutex::new(HandlerBox::new()))
+    }
+  }
+
+  fn bx (&self) -> MutexGuard<HandlerBox> { self.bx.lock().unwrap() }
+
+  pub fn open (&self, ptr: *mut std::os::raw::c_void) { self.bx().open(ptr); }
+  pub fn close (&self) { self.bx().close(); }
+
+  pub fn repaint (&self) { self.bx().repaint(); }
+  pub fn capture (&self) { self.bx().capture(); }
+  pub fn release (&self) { self.bx().release(); }
+
+  pub fn set_size (&self, w: u32, h: u32) { self.bx().set_size(w, h); }
+
+  pub fn attach <W: Component + 'static> (&self, win: W) {
+    self.bx().attach(win);
+  }
+}

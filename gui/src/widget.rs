@@ -1,17 +1,13 @@
 
-/// El componente lógico principal en el que se dividen las secciones de una ventana.
-pub trait Widget {
-  fn paint (&self, canvas: &mut ::Canvas);
-  fn event (&mut self, ev: ::Event);
-}
+use Component;
 
 /// Un grupo de widgets
 pub struct Group {
-  pub children: Vec<Box<Widget>>,
+  pub children: Vec<Box<Component>>,
   pub bg: Option<(u32, u32, ::Image)>,
 }
 
-impl Widget for Group {
+impl Component for Group {
   fn paint (&self, canvas: &mut ::Canvas) {
     match self.bg {
       Some((x, y, ref bg)) => canvas.fill_image((x,y), &bg),
@@ -29,31 +25,21 @@ impl Widget for Group {
   }
 }
 
-pub struct Window {
-  pub size: (u32, u32),
-  pub main: Group
-}
-
-impl ::Window for Window {
-  fn get_size (&self) -> (u32, u32) { self.size }
-  fn paint(&self, canvas: &mut ::Canvas) { self.main.paint(canvas) }
-  fn event(&mut self, ev: ::Event) { self.main.event(ev) }
-}
-
 pub trait Painter {
   fn paint(&self, value: f32, canvas: &mut ::Canvas);
 }
 
 pub enum SliderStyle {Vertical, VerticalInverse}
 
-pub struct Slider {
+pub struct Slider<P: Painter, F: Fn(f32)> {
   x: i32,
   y: i32,
   w: i32,
   h: i32,
   handler: ::Handler,
   style: SliderStyle,
-  painter: Box<Painter>,
+  painter: P,
+  callback: F,
 
   // Estado
   value: f32,
@@ -62,19 +48,21 @@ pub struct Slider {
   mouse_y: i32
 }
 
-impl Slider {
+impl<P: Painter, F: Fn(f32)> Slider<P, F> {
   pub fn new (
     x: i32, y: i32,
     w: i32, h: i32,
     handler: ::Handler,
     style: SliderStyle,
-    painter: Box<Painter>
-  ) -> Slider {
+    painter: P,
+    callback: F,
+  ) -> Slider<P, F> {
     Slider {
       x: x, y: y, w: w, h: h,
       handler: handler,
       style: style,
       painter: painter,
+      callback: callback,
       value: 0.0,
       active: false,
       mouse_x: 0,
@@ -83,7 +71,7 @@ impl Slider {
   }
 }
 
-impl Widget for Slider {
+impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
   fn paint (&self, canvas: &mut ::Canvas) {
     self.painter.paint(self.value, canvas);
   }
@@ -97,22 +85,33 @@ impl Widget for Slider {
           // Cuánto se ha movido relativo a su tamaño, en 0..1
           let yrel = (ydif as f32) / (self.h as f32);
 
-          // y va hacia abajo, pero necesitamos la distancia hacia arriba,
-          // por eso lo resto en vez de sumar
-          let value = self.value + yrel;
+          let value = {
+            // y va hacia abajo, pero necesitamos la distancia hacia arriba,
+            // por eso lo resto en vez de sumar
+            let v = self.value + yrel;
 
-          self.value = // clamp(value, 0, 1)
-            if value > 1.0 { 1.0 }
-            else if value < 0.0 { 0.0 }
-            else { value };
+            // clamp(v, 0, 1)
+            if v > 1.0 { 1.0 }
+            else if v < 0.0 { 0.0 }
+            else { v }
+          };
 
-          self.handler.repaint();
+          if (value != self.value) {
+            (self.callback)(value);
+            self.value = value;
+            self.handler.repaint();
+          }
         }
         self.mouse_x = x;
         self.mouse_y = y;
       },
       ::Event::MouseDown(::MouseBtn::L) => {
-        if !self.active {
+        if (!self.active &&
+          self.mouse_x > self.x &&
+          self.mouse_x < self.x + self.w &&
+          self.mouse_y > self.y &&
+          self.mouse_y < self.y + self.h
+        ) {
           self.handler.capture();
           self.active = true;
         }
