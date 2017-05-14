@@ -30,7 +30,7 @@ fn print_win_err (msg: &str) {
 
 impl Canvas {
   pub fn fill_image (&mut self,
-    pos: (u32, u32),
+    pos: (i32, i32),
     img: &Image
   ) {
     use gdi32::{CreateCompatibleDC, SelectObject, BitBlt, DeleteDC, GdiAlphaBlend};
@@ -80,7 +80,7 @@ impl Canvas {
   }
 
   pub fn fill_rect(&mut self,
-    pos: (u32, u32),
+    pos: (i32, i32),
     size: (u32, u32),
     color: Color
   ) {
@@ -95,8 +95,8 @@ impl Canvas {
       let rect = ::winapi::windef::RECT{
         left: pos.0 as i32,
         top: pos.1 as i32,
-        right: (pos.0 + size.0) as i32,
-        bottom: (pos.1 + size.1) as i32
+        right: (pos.0 + size.0 as i32) as i32,
+        bottom: (pos.1 + size.1 as i32) as i32
       };
       let brush = ::gdi32::CreateSolidBrush(color_i);
       ::user32::FillRect(self.hdc, &rect, brush);

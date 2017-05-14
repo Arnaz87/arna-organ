@@ -9,6 +9,10 @@ use vst2::api::Supported;
 
 use editor::Editor;
 
+use std::sync::{Arc, Mutex, mpsc};
+
+use ParamEvent;
+
 pub struct Info {
   pub name: String,
   pub author: String,
@@ -63,15 +67,32 @@ pub trait Synth {
   fn arch_change(&mut self, arch: Architecture) {}
 }
 
-pub struct SynthPlugin<T: Synth> {
-  synth: T,
+fn param_thread <T: Synth + Send + 'static> (
+  receiver: mpsc::Receiver<ParamEvent>,
+  synth_mutex: Arc<Mutex<T>>
+) {
+  ::std::thread::spawn(move || {
+    while let Ok(first) = receiver.recv() {
+      let mut synth = synth_mutex.lock().unwrap();
+      synth.set_param(first.index, first.value);
+
+      while let Ok(ev) = receiver.try_recv() {
+        synth.set_param(ev.index, ev.value);
+      }
+    }
+  });
+}
+
+pub struct SynthPlugin<T: Synth + Send> {
+  synth: Arc<Mutex<T>>,
   params: Vec<f32>,
   events: Vec<Event>,
   arch: Architecture,
   editor: Editor,
+  sender: mpsc::Sender<ParamEvent>,
 }
 
-impl<T: Synth> Plugin for SynthPlugin<T> {
+impl<T: Synth + Send + 'static> Plugin for SynthPlugin<T> {
   fn get_info(&self) -> VstInfo {
     let sinf = T::get_info();
     VstInfo {
@@ -111,14 +132,21 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
       params[i] = value;
     }
 
-    let editor = Editor::new(host);
+    let mutex = Arc::new(Mutex::new(synth));
+
+    let (sender, receiver) = mpsc::channel();
+
+    param_thread(receiver, mutex.clone());
+
+    let editor = Editor::new(host, sender.clone());
 
     SynthPlugin{
-      synth: synth,
+      synth: mutex,
       params: params,
       events: Vec::new(),
       arch: arch,
       editor: editor,
+      sender: sender,
     }
   }
 
@@ -128,14 +156,15 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
 
   fn set_parameter(&mut self, index: i32, value: f32) {
     self.params[index as usize] = value;
-    self.synth.set_param(index as usize, value);
+    //self.synth.set_param(index as usize, value);
   }
 
   fn get_parameter_name(&self, index: i32) -> String { T::param_name(index as usize) }
 
   fn set_sample_rate(&mut self, rate: f32) {
     self.arch.sample_rate = rate;
-    self.synth.arch_change(self.arch);
+    self.synth.lock().unwrap().arch_change(self.arch);
+    //self.synth.arch_change(self.arch);
   }
 
   fn process(&mut self, buffer: AudioBuffer<f32>){
@@ -164,6 +193,9 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
     */
 
     let mut events = self.events.drain(..);
+
+    let mut synth = self.synth.lock().unwrap();
+
     let mut last_event = events.next();
     for (i, (lsample, rsample)) in iterator.enumerate() {
 
@@ -172,8 +204,8 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
       match last_event.clone() {
         Some( Event{ sample, data } ) if (sample as usize)<=i => {
           match data[0] {
-            0x90 => self.synth.note_on(data[1], data[2]),
-            0x80 => self.synth.note_off(data[1]),
+            0x90 => synth.note_on(data[1], data[2]),
+            0x80 => synth.note_off(data[1]),
             _ => {}
           }
           last_event = events.next();
@@ -181,7 +213,7 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
         _ => {}
       }
 
-      let (l, r) = self.synth.clock();
+      let (l, r) = synth.clock();
       *lsample = l;
       *rsample = r;
     }
@@ -206,7 +238,7 @@ impl<T: Synth> Plugin for SynthPlugin<T> {
   }
 }
 
-impl<T: Synth> Default for SynthPlugin<T> {
+impl<T: Synth + Send + 'static> Default for SynthPlugin<T> {
   fn default () -> SynthPlugin<T> {
     SynthPlugin::new(Default::default())
   }

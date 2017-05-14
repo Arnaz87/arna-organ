@@ -8,6 +8,12 @@ pub mod synth;
 pub mod voice;
 pub mod editor;
 
+#[derive(Clone, Copy)]
+pub struct ParamEvent {
+  index: usize,
+  value: f32
+}
+
 //pub use gui;
 pub use vst2::{main as vstmain, api as vstapi};
 

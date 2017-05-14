@@ -1,23 +1,27 @@
 use vst2::editor::{Editor as VstEditor};
 use vst2::plugin::{HostCallback};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
+
+use ParamEvent;
 
 pub struct Editor {
   width: u32,
   height: u32,
+  isopen: bool,
   handler: Option<::gui::Handler>,
   host: Arc<Mutex<HostCallback>>,
-  isopen: bool,
+  sender: mpsc::Sender<ParamEvent>,
 }
 
 impl Editor {
-  pub fn new (host: HostCallback) -> Editor {
+  pub fn new (host: HostCallback, sender: mpsc::Sender<ParamEvent>) -> Editor {
     Editor {
       width: 300,
       height: 100,
+      isopen: false,
       handler: None,
       host: Arc::new(Mutex::new(host)),
-      isopen: false,
+      sender: sender,
     }
   }
 }
@@ -35,7 +39,8 @@ impl VstEditor for Editor {
         let window = ::gui::widget::Group {
           children: vec![
             Box::new(::gui::widget::Slider::new(
-              0, 0, 44, 44,
+              10, 10, 44, 44,
+              100.0,
               handler.clone(),
               ::gui::widget::SliderStyle::Vertical,
               ::gui::widget::SeqPaint::new(
@@ -43,7 +48,12 @@ impl VstEditor for Editor {
                 44, // height
                 40, // count
               ),
-              |v: f32| { println!("{}", v); }
+              {
+                let sender = self.sender.clone();
+                move |v: f32| {
+                  sender.send(ParamEvent{index: 21, value: v});
+                }
+              }
             ))
           ],
           bg: match ::gui::Image::load("craft.png") {

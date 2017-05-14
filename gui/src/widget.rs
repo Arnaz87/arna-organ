@@ -4,7 +4,7 @@ use Component;
 /// Un grupo de widgets
 pub struct Group {
   pub children: Vec<Box<Component>>,
-  pub bg: Option<(u32, u32, ::Image)>,
+  pub bg: Option<(i32, i32, ::Image)>,
 }
 
 impl Component for Group {
@@ -26,7 +26,8 @@ impl Component for Group {
 }
 
 pub trait Painter {
-  fn paint(&self, value: f32, canvas: &mut ::Canvas);
+  fn set_value(&mut self, value: f32);
+  fn paint(&self, canvas: &mut ::Canvas, x: i32, y: i32);
 }
 
 pub enum SliderStyle {Vertical, VerticalInverse}
@@ -36,6 +37,7 @@ pub struct Slider<P: Painter, F: Fn(f32)> {
   y: i32,
   w: i32,
   h: i32,
+  sensitivity: f32,
   handler: ::Handler,
   style: SliderStyle,
   painter: P,
@@ -52,6 +54,7 @@ impl<P: Painter, F: Fn(f32)> Slider<P, F> {
   pub fn new (
     x: i32, y: i32,
     w: i32, h: i32,
+    sens: f32,
     handler: ::Handler,
     style: SliderStyle,
     painter: P,
@@ -59,6 +62,7 @@ impl<P: Painter, F: Fn(f32)> Slider<P, F> {
   ) -> Slider<P, F> {
     Slider {
       x: x, y: y, w: w, h: h,
+      sensitivity: sens,
       handler: handler,
       style: style,
       painter: painter,
@@ -73,22 +77,21 @@ impl<P: Painter, F: Fn(f32)> Slider<P, F> {
 
 impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
   fn paint (&self, canvas: &mut ::Canvas) {
-    self.painter.paint(self.value, canvas);
+    self.painter.paint(canvas, self.x, self.y);
   }
   fn event (&mut self, ev: ::Event) {
     match ev {
       ::Event::MouseMove(x, y) => {
         if self.active {
           // Cuanto se ha movido el mouse en y en píxeles
-          let ydif = -(y - self.mouse_y);
+          // y aumenta hacia abajo
+          let ymov = self.mouse_y - y;
 
-          // Cuánto se ha movido relativo a su tamaño, en 0..1
-          let yrel = (ydif as f32) / (self.h as f32);
+          // Cuanto cambiar el valor
+          let ydif = ymov as f32 / self.sensitivity;
 
           let value = {
-            // y va hacia abajo, pero necesitamos la distancia hacia arriba,
-            // por eso lo resto en vez de sumar
-            let v = self.value + yrel;
+            let v = self.value + ydif;
 
             // clamp(v, 0, 1)
             if v > 1.0 { 1.0 }
@@ -98,6 +101,7 @@ impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
 
           if (value != self.value) {
             (self.callback)(value);
+            self.painter.set_value(value);
             self.value = value;
             self.handler.repaint();
           }
@@ -127,113 +131,44 @@ impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
   }
 }
 
-/*
-pub struct SliderControl {
-  x: i32,
-  y: i32,
-  w: i32,
-  h: i32,
-  pub value: f32,
-  mouse_down: bool,
-  mouse_x: i32,
-  mouse_y: i32,
-}
-
-impl SliderControl {
-  pub fn new (w: i32, h: i32) -> SliderControl {
-    SliderControl {
-      x: 0,
-      y: 0,
-      w: w,
-      h: h,
-      value: 0.0,
-      mouse_down: false,
-      mouse_x: 0,
-      mouse_y: 0,
-    }
-  }
-
-  pub fn event(&mut self, ev: ::Event) {
-    match ev {
-      ::Event::MouseMove(x, y) => {
-        if self.mouse_down {
-          // Cuanto se ha movido el mouse en y en píxeles
-          let ydif = -(y - self.mouse_y);
-
-          // Cuánto se ha movido relativo a su tamaño, en 0..1
-          let yrel = (ydif as f32) / (self.h as f32);
-
-          // y va hacia abajo, pero necesitamos la distancia hacia arriba,
-          // por eso lo resto en vez de sumar
-          let value = self.value + yrel;
-
-          self.value = // clamp(value, 0, 1)
-            if value > 1.0 { 1.0 }
-            else if value < 0.0 { 0.0 }
-            else { value };
-        }
-        self.mouse_x = x;
-        self.mouse_y = y;
-      },
-      ::Event::MouseDown(::MouseBtn::L) => {
-        self.mouse_down = true;
-      },
-      ::Event::MouseUp(::MouseBtn::L) => {
-        self.mouse_down = false;
-      },
-      _ => {}
-    }
-  }
-}
-*/
 /// Pinta una sección diferente de la imagen por cada valor.
 pub struct SeqPaint {
-  pub img: ::Image,
-  pub value: f32,
+  /// Imagen original
+  img: ::Image,
+
+  /// Sección de la imagen que se muestra
+  section: ::Image,
+
   /// Altura de cada sección.
-  pub height: u16,
+  height: u16,
+
   /// Cantidad de secciones.
-  pub count: u16,
+  count: u16,
 }
 
 impl Painter for SeqPaint {
-  fn paint(&self, value: f32, canvas: &mut ::Canvas) {
+  fn set_value(&mut self, value: f32) {
     let i = (value * (self.count as f32)).floor() as u16;
-
     let y = (i * self.height) as i32;
+    self.section = self.img.clone().crop(0, y as i32, self.img.width as i32, self.height as i32);
+  }
 
-    let img = &self.img.clone().crop(0, y as i32, self.img.width as i32, self.height as i32);
-
-    canvas.fill_image((0,0), &img);
+  fn paint(&self, canvas: &mut ::Canvas, x: i32, y: i32) {
+    canvas.fill_image((x,y), &self.section);
   }
 }
 
 
 impl SeqPaint {
-
   pub fn new (img: ::Image, height: u16, count: u16) -> SeqPaint {
+    let section = img.clone().crop(0, 0, img.width as i32, height as i32);
     SeqPaint {
       img: img,
       height: height,
       count: count,
-      value: 0.0,
-      //section: img.clone,
+      section: section
     }
   }
-
-  /*pub fn set_value (&mut self, value: f32) {
-    self.value = value;
-  }
-
-  pub fn paint(&self, canvas: &mut ::Canvas) {
-    let i = (self.value * (self.count as f32)).floor() as u16;
-
-    let y = (i * self.height) as i32;
-
-    let img = &self.img.clone().crop(0, y as i32, self.img.width as i32, self.height as i32);
-
-    canvas.fill_image((0,0), &img);
-  }*/
 }
 
 /*
