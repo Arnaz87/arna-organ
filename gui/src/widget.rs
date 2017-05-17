@@ -83,15 +83,22 @@ impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
     match ev {
       ::Event::MouseMove(x, y) => {
         if self.active {
-          // Cuanto se ha movido el mouse en y en píxeles
-          // y aumenta hacia abajo
-          let ymov = self.mouse_y - y;
+          // Cuanto se ha movido el mouse en píxeles
+          // y aumenta hacia abajo, x aumenta hacia la derecha
+          let xmov = x - self.mouse_x;
+          let ymov = y - self.mouse_y;
+
+          // Cuantos píxeles se ha movido el mouse en la dirección deseada.
+          let mov = match self.style {
+            SliderStyle::Vertical => -ymov,
+            SliderStyle::VerticalInverse => ymov
+          };
 
           // Cuanto cambiar el valor
-          let ydif = ymov as f32 / self.sensitivity;
+          let dif = mov as f32 / self.sensitivity;
 
           let value = {
-            let v = self.value + ydif;
+            let v = self.value + dif;
 
             // clamp(v, 0, 1)
             if v > 1.0 { 1.0 }
@@ -131,26 +138,46 @@ impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
   }
 }
 
+pub enum SeqDirection {Horizontal, Vertical}
+
 /// Pinta una sección diferente de la imagen por cada valor.
 pub struct SeqPaint {
   /// Imagen original
   img: ::Image,
 
-  /// Sección de la imagen que se muestra
+  /// Posición de la primera sección en la imagen original
+  pos: (u16, u16),
+
+  /// Tamaño de cada sección
+  size: (u16, u16),
+
+  /// Orientación de la secuencia de imágenes
+  dir: SeqDirection,
+
+  /// Distancia entre las secciones (usualmente mayor que w)
+  distance: u16,
+
+  /// Último índice de la sección
+  last: u16,
+
+  /// Sección actual, depende de set_value
   section: ::Image,
-
-  /// Altura de cada sección.
-  height: u16,
-
-  /// Cantidad de secciones.
-  count: u16,
 }
 
 impl Painter for SeqPaint {
   fn set_value(&mut self, value: f32) {
-    let i = (value * (self.count as f32)).floor() as u16;
-    let y = (i * self.height) as i32;
-    self.section = self.img.clone().crop(0, y as i32, self.img.width as i32, self.height as i32);
+    // value va de 0 a 1 inclusivo
+    let i = (value * (self.last as f32)).floor() as u16;
+    let add = i * self.distance;
+    let (x, y) = match self.dir {
+      SeqDirection::Horizontal => (self.pos.0 + add, self.pos.1),
+      SeqDirection::Vertical   => (self.pos.0, self.pos.1 + add)
+    };
+    self.section = self.img.clone().crop(
+      x as i32, y as i32,
+      self.size.0 as i32,
+      self.size.1 as i32
+    );
   }
 
   fn paint(&self, canvas: &mut ::Canvas, x: i32, y: i32) {
@@ -160,12 +187,26 @@ impl Painter for SeqPaint {
 
 
 impl SeqPaint {
-  pub fn new (img: ::Image, height: u16, count: u16) -> SeqPaint {
-    let section = img.clone().crop(0, 0, img.width as i32, height as i32);
+  pub fn new (
+    img: ::Image,
+    pos: (u16, u16),
+    size: (u16, u16),
+    dir: SeqDirection,
+    dist: u16,
+    count: u16
+  ) -> SeqPaint {
+    // Simula set_value(0)
+    let section = img.clone().crop(
+      pos.0 as i32, pos.1 as i32,
+      size.0 as i32, size.1 as i32
+    );
     SeqPaint {
       img: img,
-      height: height,
-      count: count,
+      pos: pos,
+      size: size,
+      dir: dir,
+      distance: dist,
+      last: count-1,
       section: section
     }
   }

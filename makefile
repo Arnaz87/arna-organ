@@ -17,15 +17,9 @@ release:
 
 run:
 	wine savihost.exe $(DLL)
-#	wine savihost.exe target/i686-pc-windows-gnu/debug/$(DLL)
-#run-release:
-#	wine savihost.exe target/i686-pc-windows-gnu/release/$(DLL)
 
 copy:
-	cp -i $(DEBUG) ~/Sonido/Vsts/$(DLL)
-
-copy-release:
-	cp -i $(RELEASE) ~/Sonido/Vsts/$(DLL)
+	cp -i $(DLL) ~/Sonido/Vsts/$(DLL)
 
 clean:
 	cargo clean

@@ -158,7 +158,7 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
 
   fn set_parameter(&mut self, index: i32, value: f32) {
     self.params[index as usize] = value;
-    //self.synth.set_param(index as usize, value);
+    self.sender.send(ParamEvent{index: index as usize, value: value});
   }
 
   fn get_parameter_name(&self, index: i32) -> String { T::param_name(index as usize) }
@@ -166,7 +166,6 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
   fn set_sample_rate(&mut self, rate: f32) {
     self.arch.sample_rate = rate;
     self.synth.lock().unwrap().arch_change(self.arch);
-    //self.synth.arch_change(self.arch);
   }
 
   fn process(&mut self, buffer: AudioBuffer<f32>){

@@ -299,43 +299,6 @@ fn unregister_class () {
   }
 }
 
-/*fn make_window<'a> (win_arc: Arc<Mutex<Window>>, syswnd: HWND) -> HWND {
-
-  let (width, height) = {
-    let win = win_arc.lock().unwrap();
-    (*win).get_size()
-  };
-
-  // Esto crea un puntero independiente en la memoria
-  let winbox_ptr: *mut Arc<Mutex<Window>> = Box::into_raw(Box::new(win_arc));
-
-  let hwnd = unsafe { ::user32::CreateWindowExW(
-    0,
-    W_CLASS_NAME.as_ptr(),
-    to_wstring("Window").as_ptr(),
-    {
-      use winapi::winuser::*;
-      WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CLIPSIBLINGS
-    },
-    0, 0, width as i32, height as i32,
-    syswnd,
-    0 as ::winapi::windef::HMENU,
-    0 as HINSTANCE,
-    ::std::ptr::null_mut()
-    //winbox_ptr as *mut c_void
-  ) };
-
-  // Debo usar esto para poder usar el hwnd para crear la ventana, y luego sí
-  // asignal la ventana creada a este hwnd
-  //SetWindowLongPtr ((HWND)pHwnd, GWLP_USERDATA, (__int3264)(LONG_PTR)this);
-
-  if hwnd.is_null() {
-    print_win_err("Create Window at make_window");
-  }
-
-  hwnd
-}*/
-
 struct WinBitmap <'a> {
   hbitmap: *const c_void,
   phantom: ::std::marker::PhantomData<&'a c_void>
@@ -435,9 +398,9 @@ impl Image {
           }
 
           // Windows usa alfa premultiplicado
-          pixels[i+0] = premul!(r, a);
+          pixels[i+0] = premul!(b, a);
           pixels[i+1] = premul!(g, a);
-          pixels[i+2] = premul!(b, a);
+          pixels[i+2] = premul!(r, a);
           pixels[i+3] = a;
         }
       }
