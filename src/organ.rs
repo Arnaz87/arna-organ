@@ -86,6 +86,8 @@ macro_rules! zip {
 }
 
 impl Synth for Organ {
+  type Editor = ::editor::Gui;
+
   fn get_info() -> Info {
     Info {
       name: "Basic Plugin".to_string(),

@@ -7,5 +7,6 @@ mod pipe;
 mod organ;
 mod effects;
 mod helpers;
+mod editor;
 
 synth_main!(organ::Organ);

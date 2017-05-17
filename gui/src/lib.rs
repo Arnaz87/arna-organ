@@ -72,6 +72,10 @@ pub struct Handler {
   bx: Arc<Mutex<HandlerBox>>
 }
 
+// TODO: Creo que este handler debería ser dos handlers diferentes, un
+// InHandler para pasarle a la ventana para que controle cosas internas
+// (repaint, capture, release), y un OutHandler para que controle la ventana
+// desde afuera (open y close)
 impl Handler {
   pub fn new () -> Handler {
     Handler{
@@ -88,8 +92,9 @@ impl Handler {
   pub fn capture (&self) { self.bx().capture(); }
   pub fn release (&self) { self.bx().release(); }
 
-  pub fn set_size (&self, w: u32, h: u32) { self.bx().set_size(w, h); }
+  pub fn set_size (&self, w: usize, h: usize) { self.bx().set_size(w, h); }
 
+  // W debería ser Send, pero no puedo hacerlo
   pub fn attach <W: Component + 'static> (&self, win: W) {
     self.bx().attach(win);
   }

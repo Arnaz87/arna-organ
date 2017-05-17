@@ -171,7 +171,6 @@ unsafe extern "system" fn window_proc(
       let y = winapi::windowsx::GET_Y_LPARAM(l_param) as i32;
       get_window!(win, {
         win.event(::Event::$ev(x, y));
-        repaint(hwnd);
       });
     };
   }
@@ -337,16 +336,22 @@ fn unregister_class () {
   hwnd
 }*/
 
-struct WinBitmap { hbitmap: ::winapi::windef::HBITMAP }
-impl WinBitmap {
-  fn new (hbm: ::winapi::windef::HBITMAP) -> WinBitmap {
-    WinBitmap { hbitmap: hbm }
+struct WinBitmap <'a> {
+  hbitmap: *const c_void,
+  phantom: ::std::marker::PhantomData<&'a c_void>
+}
+impl<'a> WinBitmap<'a> {
+  fn new (hbm: ::winapi::windef::HBITMAP) -> WinBitmap<'a> {
+    WinBitmap {
+      hbitmap: hbm as *const c_void,
+      phantom: ::std::marker::PhantomData
+    }
   }
   fn get_hbitmap (&self) -> ::winapi::windef::HBITMAP {
-    self.hbitmap
+    self.hbitmap as ::winapi::windef::HBITMAP
   }
 }
-impl Drop for WinBitmap {
+impl<'a> Drop for WinBitmap<'a> {
   fn drop (&mut self) {
     unsafe { ::gdi32::DeleteObject(self.hbitmap as *mut c_void) };
   }
@@ -355,10 +360,12 @@ impl Drop for WinBitmap {
 pub struct Image {
   pub width: u32,
   pub height: u32,
-  winbm: ::std::rc::Rc<WinBitmap>,
+  winbm: Arc<WinBitmap<'static>>,
   area: (i32, i32, i32, i32),
   //img: ::image::DynamicImage
 }
+
+unsafe impl Send for Image { }
 
 impl Image {
 
@@ -445,7 +452,10 @@ impl Image {
 
     let path = ::std::path::Path::new(path_str);
     match ::image::open(path) {
-      Err(_) => None,
+      Err(_) => {
+        printerr!("File {:?} not found, at {:?}", path, ::std::env::current_dir().unwrap());
+        None
+      },
       Ok(img) => {
         let hbitmap = Image::make_hbitmap(&img);
         if hbitmap.is_null() { None }
@@ -454,7 +464,7 @@ impl Image {
           Some( Image {
             width: width,
             height: height,
-            winbm: ::std::rc::Rc::new(WinBitmap::new(hbitmap)),
+            winbm: Arc::new(WinBitmap::new(hbitmap)),
             area: (0, 0, width as i32, height as i32)
             //img: img,
           } )
@@ -575,18 +585,19 @@ impl HandlerBox {
     }
   }
 
-  pub fn set_size (&mut self, w: u32, h: u32) {
+  pub fn set_size (&mut self, w: usize, h: usize) {
     self.width = w as i32;
     self.height = h as i32;
   }
 
   fn attach_impl (&mut self) {
-    // No entiendo bien esta parte
     match self.win {
       Some(ref win_arc) => {
+        // Aquí, este win_ptr debe ser Send porque lo voy a enviar al
+        // thread del GUI de Windows.
         let win_ptr = Box::into_raw(Box::new(win_arc.clone()));
         unsafe {
-          // Debería ser SetWindowLongPtrW
+          // Debería ser SetWindowLongPtrW, pero rust winapi no lo tiene
           ::user32::SetWindowLongW(
             self.hwnd,
             ::winapi::winuser::GWLP_USERDATA,
@@ -599,6 +610,7 @@ impl HandlerBox {
   }
 
   pub fn attach <W: Component + 'static> (&mut self, win: W) {
+    // El uso de Send está en attach_impl
     let winx = Arc::new(Mutex::new(win));
     self.win = Some(winx);
     self.attach_impl();

@@ -7,7 +7,7 @@ use vst2::event::{Event as VstEvent};
 use vst2::plugin::CanDo;
 use vst2::api::Supported;
 
-use editor::Editor;
+use editor::PluginEditor;
 
 use std::sync::{Arc, Mutex, mpsc};
 
@@ -36,8 +36,10 @@ pub struct Architecture {
 // #![feature(associated_consts)]
 
 #[allow(unused_variables)]
-pub trait Synth {
+pub trait Synth : Send {
   //const id: i32;
+
+  type Editor: ::editor::Editor;
 
   fn get_info() -> Info {
     Info {
@@ -67,7 +69,7 @@ pub trait Synth {
   fn arch_change(&mut self, arch: Architecture) {}
 }
 
-fn param_thread <T: Synth + Send + 'static> (
+fn param_thread <T: Synth + 'static> (
   receiver: mpsc::Receiver<ParamEvent>,
   synth_mutex: Arc<Mutex<T>>
 ) {
@@ -83,16 +85,16 @@ fn param_thread <T: Synth + Send + 'static> (
   });
 }
 
-pub struct SynthPlugin<T: Synth + Send> {
+pub struct SynthPlugin<T: Synth> {
   synth: Arc<Mutex<T>>,
   params: Vec<f32>,
   events: Vec<Event>,
   arch: Architecture,
-  editor: Editor,
+  editor: PluginEditor<T::Editor>,
   sender: mpsc::Sender<ParamEvent>,
 }
 
-impl<T: Synth + Send + 'static> Plugin for SynthPlugin<T> {
+impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
   fn get_info(&self) -> VstInfo {
     let sinf = T::get_info();
     VstInfo {
@@ -138,7 +140,7 @@ impl<T: Synth + Send + 'static> Plugin for SynthPlugin<T> {
 
     param_thread(receiver, mutex.clone());
 
-    let editor = Editor::new(host, sender.clone());
+    let editor = PluginEditor::new(host, sender.clone());
 
     SynthPlugin{
       synth: mutex,
@@ -238,7 +240,7 @@ impl<T: Synth + Send + 'static> Plugin for SynthPlugin<T> {
   }
 }
 
-impl<T: Synth + Send + 'static> Default for SynthPlugin<T> {
+impl<T: Synth + 'static> Default for SynthPlugin<T> {
   fn default () -> SynthPlugin<T> {
     SynthPlugin::new(Default::default())
   }

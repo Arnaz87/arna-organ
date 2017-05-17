@@ -10,13 +10,16 @@ CARGO=wine /home/arnaud/.wine/drive_c/Program\ Files/Rust\ stable\ GNU\ 1.13/bin
 
 build:
 	cargo build --lib --target i686-pc-windows-gnu
+	cp target/i686-pc-windows-gnu/debug/$(DLL) ./
 release:
 	cargo build --release --lib --target i686-pc-windows-gnu
+	cp target/i686-pc-windows-gnu/release/$(DLL) ./
 
 run:
-	wine savihost.exe target/i686-pc-windows-gnu/debug/$(DLL)
-run-release:
-	wine savihost.exe target/i686-pc-windows-gnu/release/$(DLL)
+	wine savihost.exe $(DLL)
+#	wine savihost.exe target/i686-pc-windows-gnu/debug/$(DLL)
+#run-release:
+#	wine savihost.exe target/i686-pc-windows-gnu/release/$(DLL)
 
 copy:
 	cp -i $(DEBUG) ~/Sonido/Vsts/$(DLL)
