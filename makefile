@@ -19,7 +19,10 @@ run:
 	wine savihost.exe $(DLL)
 
 copy:
-	cp -i $(DLL) ~/Sonido/Vsts/$(DLL)
+	rm -fr ~/Sonido/Vsts/organ
+	mkdir ~/Sonido/Vsts/organ
+	cp $(DLL) ~/Sonido/Vsts/organ/
+	cp -r assets ~/Sonido/Vsts/organ/
 
 clean:
 	cargo clean

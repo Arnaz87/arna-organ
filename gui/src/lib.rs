@@ -3,6 +3,7 @@ extern crate image;
 
 extern crate winapi;
 extern crate user32;
+extern crate kernel32;
 extern crate gdi32;
 
 #[macro_use]
@@ -65,11 +66,11 @@ pub trait Component {
 pub use self::windows::{Image, Canvas};
 
 #[cfg(windows)]
-use self::windows::HandlerBox;
+use self::windows::HandlerImpl;
 
 #[derive(Clone)]
 pub struct Handler {
-  bx: Arc<Mutex<HandlerBox>>
+  bx: Arc<Mutex<HandlerImpl>>
 }
 
 // TODO: Creo que este handler debería ser dos handlers diferentes, un
@@ -77,13 +78,13 @@ pub struct Handler {
 // (repaint, capture, release), y un OutHandler para que controle la ventana
 // desde afuera (open y close)
 impl Handler {
-  pub fn new () -> Handler {
+  pub fn new () -> Self {
     Handler{
-      bx: Arc::new(Mutex::new(HandlerBox::new()))
+      bx: Arc::new(Mutex::new(HandlerImpl::new()))
     }
   }
 
-  fn bx (&self) -> MutexGuard<HandlerBox> { self.bx.lock().unwrap() }
+  fn bx (&self) -> MutexGuard<HandlerImpl> { self.bx.lock().unwrap() }
 
   pub fn open (&self, ptr: *mut std::os::raw::c_void) { self.bx().open(ptr); }
   pub fn close (&self) { self.bx().close(); }
@@ -95,7 +96,50 @@ impl Handler {
   pub fn set_size (&self, w: usize, h: usize) { self.bx().set_size(w, h); }
 
   // W debería ser Send, pero no puedo hacerlo
-  pub fn attach <W: Component + 'static> (&self, win: W) {
-    self.bx().attach(win);
+  pub fn attach<T: Component + 'static> (&self, win: T) -> Arc<Mutex<T>> {
+    let arc = Arc::new(Mutex::new(win));
+    self.bx().attach(arc.clone());
+    arc
   }
 }
+/*
+
+  pub fn component (&self) -> Arc<Mutex<T>> {
+    self.bx().component()
+  }
+
+  pub fn to_box (self) -> HandlerBox {
+    HandlerBox{ bx: Box::new(self) }
+  }
+}
+
+impl<T: Component + 'static> Clone for Handler<T> {
+  fn clone (&self) -> Self {
+    Handler { bx: self.bx.clone() }
+  }
+}
+
+// Este trait solo es necesario para implementar HandlerBox
+trait HandlerTrait {
+  fn t_repaint (&self);
+  fn t_capture (&self);
+  fn t_release (&self);
+}
+
+impl<T: Component + 'static> HandlerTrait for Handler<T> {
+  fn t_repaint (&self) { self.repaint(); }
+  fn t_capture (&self) { self.capture(); }
+  fn t_release (&self) { self.release(); }
+}
+
+#[derive(Clone)]
+pub struct HandlerBox {
+  bx: Box<HandlerTrait>
+}
+
+impl HandlerBox {
+  fn repaint (&self) { self.bx.t_repaint(); }
+  fn capture (&self) { self.bx.t_capture(); }
+  fn release (&self) { self.bx.t_release(); }
+}
+*/

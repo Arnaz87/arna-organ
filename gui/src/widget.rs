@@ -25,6 +25,14 @@ impl Component for Group {
   }
 }
 
+pub trait Control : Component {
+  type Value;
+  fn set_value(&mut self, value: Self::Value);
+
+  /// Asigna el valor sin efectos secundarios
+  fn update_value(&mut self, value: Self::Value);
+}
+
 pub trait Painter {
   fn set_value(&mut self, value: f32);
   fn paint(&self, canvas: &mut ::Canvas, x: i32, y: i32);
@@ -106,23 +114,17 @@ impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
             else { v }
           };
 
-          if (value != self.value) {
-            (self.callback)(value);
-            self.painter.set_value(value);
-            self.value = value;
-            self.handler.repaint();
-          }
+          self.set_value(value);
         }
         self.mouse_x = x;
         self.mouse_y = y;
       },
       ::Event::MouseDown(::MouseBtn::L) => {
-        if (!self.active &&
+        if !self.active &&
           self.mouse_x > self.x &&
           self.mouse_x < self.x + self.w &&
           self.mouse_y > self.y &&
-          self.mouse_y < self.y + self.h
-        ) {
+          self.mouse_y < self.y + self.h {
           self.handler.capture();
           self.active = true;
         }
@@ -135,6 +137,22 @@ impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
       },
       _ => {}
     }
+  }
+}
+
+impl<P: Painter, F: Fn(f32)> Control for Slider<P, F> {
+  type Value = f32;
+  fn set_value (&mut self, value: f32) {
+    if value == self.value { return; }
+    (self.callback)(value);
+    self.update_value(value);
+  }
+
+  fn update_value (&mut self, value: f32) {
+    if value == self.value { return; }
+    self.painter.set_value(value);
+    self.value = value;
+    self.handler.repaint();
   }
 }
 

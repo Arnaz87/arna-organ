@@ -110,7 +110,7 @@ lazy_static!{
   static ref W_CLASS_NAME: Vec<u16> = to_wstring("MyComponentClass");
 }
 
-fn to_wstring(str : &str) -> Vec<u16> {
+fn to_wstring(str: &str) -> Vec<u16> {
   use std::ffi::OsStr;
   use std::os::windows::ffi::OsStrExt;
   OsStr::new(str).encode_wide().chain(Some(0).into_iter()).collect()
@@ -320,6 +320,8 @@ impl<'a> Drop for WinBitmap<'a> {
   }
 }
 
+static mut EMPTY_ADDRESS: u16 = 0;
+
 pub struct Image {
   pub width: u32,
   pub height: u32,
@@ -409,14 +411,54 @@ impl Image {
     hbitmap
   }
 
+  /// path_str debe ser relativo al dll
   pub fn load (path_str: &str) -> Option<Image> {
     use image::GenericImage;
     use winapi::windef::POINT;
 
-    let path = ::std::path::Path::new(path_str);
+    use std::path::PathBuf;
+
+    //kernel32::GetModuleFileNameW
+
+    let mut path_buf = {
+      use std::ffi::OsString;
+      use std::os::windows::ffi::OsStringExt;
+
+      let mut hmodule = 0 as ::winapi::minwindef::HMODULE;
+
+      let mut wstr = [0u16; 256];
+
+      unsafe {
+        // https://msdn.microsoft.com/en-us/library/windows/desktop/ms683200(v=vs.85).aspx
+        let GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT = 0x02;
+        let GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS = 0x04;
+
+        ::kernel32::GetModuleHandleExW(
+          GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+          &EMPTY_ADDRESS, &mut hmodule
+        );
+      };
+
+      let size = unsafe{ ::kernel32::GetModuleFileNameW(
+        hmodule,
+        wstr.as_mut_ptr(),
+        256
+      ) };
+
+      let os_str = OsString::from_wide(&wstr[0..(size as usize+1)]);
+      PathBuf::from(os_str)
+    }; // dll file path
+
+    path_buf.pop(); // folder containing the dll
+    path_buf.push(path_str);
+
+    // Final resource path
+    let path = path_buf.as_path();
+
     match ::image::open(path) {
       Err(_) => {
-        printerr!("File {:?} not found, at {:?}", path, ::std::env::current_dir().unwrap());
+        printerr!("File {:?} not found", path);
         None
       },
       Ok(img) => {
@@ -460,7 +502,7 @@ impl Clone for Image {
   }
 }
 
-pub struct HandlerBox {
+pub struct HandlerImpl {
   // Debe ser immutable y Sync
 
   // Option<Arc<Mutex<T>>> Simula un puntero a un T mutable concurrente que
@@ -476,9 +518,9 @@ pub struct HandlerBox {
   height: i32,
 }
 
-impl HandlerBox {
-  pub fn new () -> HandlerBox {
-    HandlerBox {
+impl HandlerImpl {
+  pub fn new () -> Self {
+    HandlerImpl {
       win: None,
       hwnd: 0 as HWND,
       width: 0,
@@ -572,10 +614,17 @@ impl HandlerBox {
     }
   }
 
-  pub fn attach <W: Component + 'static> (&mut self, win: W) {
+  pub fn attach <T: Component + 'static> (&mut self, winx: Arc<Mutex<T>>) {
     // El uso de Send está en attach_impl
-    let winx = Arc::new(Mutex::new(win));
+    //let winx = Arc::new(Mutex::new(win));
     self.win = Some(winx);
     self.attach_impl();
   }
+
+  /*pub fn component (&self) -> Arc<Mutex<T>> {
+    match &self.win {
+      &Some(ref arc) => arc.clone(),
+      &None => panic!("No associated component")
+    }
+  }*/
 }

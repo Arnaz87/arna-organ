@@ -9,7 +9,7 @@ use vst2::api::Supported;
 
 use editor::PluginEditor;
 
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex, MutexGuard, mpsc};
 
 use ParamEvent;
 
@@ -69,7 +69,7 @@ pub trait Synth : Send {
   fn arch_change(&mut self, arch: Architecture) {}
 }
 
-fn param_thread <T: Synth + 'static> (
+/*fn param_thread <T: Synth + 'static> (
   receiver: mpsc::Receiver<ParamEvent>,
   synth_mutex: Arc<Mutex<T>>
 ) {
@@ -83,15 +83,16 @@ fn param_thread <T: Synth + 'static> (
       }
     }
   });
-}
+}*/
 
 pub struct SynthPlugin<T: Synth> {
   synth: Arc<Mutex<T>>,
-  params: Vec<f32>,
+  params: Arc<Mutex< Vec<f32> >>,
   events: Vec<Event>,
   arch: Architecture,
   editor: PluginEditor<T::Editor>,
   sender: mpsc::Sender<ParamEvent>,
+  receiver: mpsc::Receiver<ParamEvent>,
 }
 
 impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
@@ -123,24 +124,34 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
     let info = T::get_info();
     let mut synth = T::new();
 
+    let (sender, receiver) = mpsc::channel();
+
     let arch = Architecture{sample_rate: 44000_f32};
+
+    let params = Arc::new(Mutex::new(vec![0_f32; info.params]));
+
+    let editor = PluginEditor::new(::editor::Channel{
+      host: Arc::new(Mutex::new(host)),
+      sender: sender.clone(),
+      params: params.clone(),
+    });
 
     synth.arch_change(arch);
 
-    let mut params = vec![0_f32; info.params];
-    for i in 0..(info.params-1) {
-      let value = T::param_default(i);
-      synth.set_param(i, value);
-      params[i] = value;
+    {
+      let mut params = params.lock().unwrap();
+
+      for i in 0..(info.params-1) {
+        let value = T::param_default(i);
+        synth.set_param(i, value);
+        editor.set_param(i, value);
+        params[i] = value;
+      }
     }
 
     let mutex = Arc::new(Mutex::new(synth));
 
-    let (sender, receiver) = mpsc::channel();
-
-    param_thread(receiver, mutex.clone());
-
-    let editor = PluginEditor::new(host, sender.clone());
+    //param_thread(receiver, mutex.clone());
 
     SynthPlugin{
       synth: mutex,
@@ -149,16 +160,21 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
       arch: arch,
       editor: editor,
       sender: sender,
+      receiver: receiver,
     }
   }
 
   fn can_be_automated(&self, _: i32) -> bool { true }
 
-  fn get_parameter(&self, index: i32) -> f32 { self.params[index as usize] }
+  fn get_parameter(&self, index: i32) -> f32 {
+    self.params.lock().unwrap()[index as usize]
+  }
 
   fn set_parameter(&mut self, index: i32, value: f32) {
-    self.params[index as usize] = value;
-    self.sender.send(ParamEvent{index: index as usize, value: value});
+    let index = index as usize;
+    self.params.lock().unwrap()[index] = value;
+    self.sender.send(ParamEvent{index: index, value: value});
+    self.editor.set_param(index, value);
   }
 
   fn get_parameter_name(&self, index: i32) -> String { T::param_name(index as usize) }
@@ -190,12 +206,33 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
         //LOLOLOL
       }
     }
-    // Pero no puedo porque take consume el iterador
+    // Pero no puedo porque take consume el iterador.
+    // Así lo hace MDA Piano
     */
 
     let mut events = self.events.drain(..);
 
     let mut synth = self.synth.lock().unwrap();
+
+    // NOTA: Esto no debería estar en el thread de audio, primero cualquier
+    // thread puede cambiar parámetros en cualquier momento, y el
+    // sintetizador debería actualizarce inmediatamente, y segundo algunos
+    // parámetros son lentos para cambiarse, y no debería detenerse el thread
+    // de audio para cambiarlos.
+    // El primer problema se puede resolver si muevo esto dentro del bucle,
+    // y reviso cambios en cada sample, pero empeoraría el segundo problema.
+
+    if let Ok(first) = self.receiver.try_recv() {
+      let mut params = self.params.lock().unwrap();
+
+      params[first.index as usize] = first.value;
+      synth.set_param(first.index, first.value);
+
+      while let Ok(ev) = self.receiver.try_recv() {
+        params[ev.index as usize] = ev.value;
+        synth.set_param(ev.index, ev.value);
+      }
+    }
 
     let mut last_event = events.next();
     for (i, (lsample, rsample)) in iterator.enumerate() {
@@ -235,7 +272,8 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
   }
 
   fn get_editor (&mut self) -> Option<&mut VstEditor> {
-    Some(&mut self.editor)
+    None
+    //Some(&mut self.editor)
   }
 }
 
