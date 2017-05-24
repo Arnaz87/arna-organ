@@ -1,6 +1,6 @@
 
 
-use std::f32::consts::PI;
+pub use std::f32::consts::PI;
 
 pub fn sin01 (x: f32) -> f32 { (x*2.0*PI).sin() }
 //pub fn sigm (x: f32) -> f32 { x/(1.0 + x.abs()) }

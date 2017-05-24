@@ -528,6 +528,8 @@ impl HandlerImpl {
     }
   }
 
+  fn is_inactive(&self) -> bool { self.hwnd.is_null() }
+
   pub fn open (&mut self, ptr: *mut c_void) {
     // Already open
     if !self.hwnd.is_null() { return; }
@@ -562,6 +564,7 @@ impl HandlerImpl {
   }
 
   pub fn close (&mut self) {
+    if self.is_inactive() { return }
     let result = unsafe { ::user32::DestroyWindow(self.hwnd) };
     if result == 0 {
       print_win_err("Destroy Window at Handler.close");
@@ -571,6 +574,7 @@ impl HandlerImpl {
   }
 
   pub fn repaint (&self) {
+    if self.is_inactive() { return }
     unsafe {
       ::user32::InvalidateRect(
         self.hwnd, ::std::ptr::null(), 0 as ::winapi::minwindef::BOOL
@@ -579,6 +583,7 @@ impl HandlerImpl {
   }
 
   pub fn capture (&self) {
+    if self.is_inactive() { return }
     unsafe {
       ::user32::SetCapture(self.hwnd);
     }

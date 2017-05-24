@@ -188,9 +188,20 @@ impl Synth for Organ {
 
   fn param_default(index: usize) -> f32 {
     match index {
-      14 => 1.0, // Room Size
-      19 => 1.0, // Room Mix
-      20 => 0.1, // Click
+      //14 => 1.0, // Room Size
+      //19 => 1.0, // Room Mix
+      //20 => 0.1, // Click
+
+      0 => 0.2, // Warm
+
+      21 => 1.0,
+      22 => 0.95,
+      23 => 0.9,
+      24 => 0.85,
+      25 => 0.8,
+      26 => 0.7,
+      27 => 0.6,
+      28 => 0.5,
 
       _ => 0.0
     }
@@ -207,9 +218,10 @@ impl Synth for Organ {
       5 => "Vibrato Freq".to_string(),
       6 => "Vibrato Mix".to_string(),
 
-      7 => "Leslie Freq".to_string(),
-      8 => "Leslie Tremolo".to_string(),
-      9 => "Leslie Vibrato".to_string(),
+      7 => "Leslie Upper Freq".to_string(),
+      8 => "Leslie Lower Freq".to_string(),
+      9 => "Leslie Spread".to_string(),
+
       10 => "Leslie Tremolo Separation".to_string(),
       11 => "Leslie Vibrato Separation".to_string(),
       12 => "Leslie Stereo".to_string(),
@@ -255,13 +267,14 @@ impl Synth for Organ {
       5 => self.vibrato.freq = value,
       6 => self.vibrato.mix = value,
 
-      7 => self.leslie.freq = value,
-      8 => self.leslie.vol_depth = value,
-      9 => self.leslie.vib_depth = value,
-      10 => self.leslie.vol_sep = value,
-      11 => self.leslie.vib_sep = value,
-      12 => self.leslie.stereo = value,
-      13 => self.leslie.mix = value,
+      7 => self.leslie.set_h_freq(value),
+      8 => self.leslie.set_l_freq(value),
+      9 => self.leslie.stereo = value,
+      10 => {},//self.leslie.vol_sep = value,
+      11 => {},//self.leslie.vib_sep = value,
+      12 => {},//self.leslie.stereo = value,
+      //12 => self.leslie.set_split(value),
+      13 => {},//self.leslie.mix = value,
 
       14 => self.room.set_size(value),
       15 => self.room.diff1 = value,
