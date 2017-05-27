@@ -2,6 +2,7 @@
 
 pub use std::f32::consts::PI;
 
+#[inline]
 pub fn sin01 (x: f32) -> f32 { (x*2.0*PI).sin() }
 //pub fn sigm (x: f32) -> f32 { x/(1.0 + x.abs()) }
 pub fn sigm (x: f32) -> f32 { x.tanh() }
@@ -19,6 +20,7 @@ pub fn fsin (x: f32) -> f32 {
   else { -half(x - 1.0) }
 }
 
+#[inline]
 pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
   (1.0-t)*a + t*b
 }

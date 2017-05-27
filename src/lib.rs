@@ -4,6 +4,7 @@ extern crate arnaudio;
 
 mod sample;
 mod pipe;
+mod hammond;
 mod organ;
 mod effects;
 mod helpers;

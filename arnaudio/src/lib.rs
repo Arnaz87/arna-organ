@@ -1,3 +1,4 @@
+#![feature(conservative_impl_trait)]
 
 extern crate vst2;
 extern crate libc;

@@ -18,5 +18,5 @@
  */
 
 fn main () {
-  println!("cargo:rustc-link-search=/home/arnaud/.rustup/toolchains/stable-i686-pc-windows-gnu/lib/rustlib/i686-pc-windows-gnu/lib");
+  println!("cargo:rustc-link-search=/home/arnaud/.rustup/toolchains/nightly-i686-pc-windows-gnu/lib/rustlib/i686-pc-windows-gnu/lib");
 }
