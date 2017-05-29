@@ -13,34 +13,53 @@ const weights: [f32; WHEEL_COUNT] = [
   1.5, 1.0, 0.8, 0.8, 0.8, 0.8, 0.8, 0.6//, 0.6
 ];
 
-/*
-  Algoritmo de generación de ruido.
+// Todas estas están en segundos. Decay y Click indican el
+// tiempo que se dura en llegar a -20dB = 0.1 de amplitud
+const ATTACK: f32 = 0.005;
+const MIN_DECAY: f32 = 0.005;
+const MAX_DECAY: f32 = 1.0;
+const CLICK:  f32 = 0.01;
+// La voz se apaga cuando llega a 0.01 de amplitud, que son
+// -40dB, y dura el doble del tiempo que dura en llegar a -20dB
 
-  fuentes:
-  http://www.musicdsp.org/archive.php?classid=1#217
-  http://www.musicdsp.org/showArchiveComment.php?ArchiveID=217
+const CLICK_START: f32 = 4.0;
+const CLICK_END: f32 = 3.0;
 
-  Fórmula: frac((x+A)^2)
-    con A siendo cualquier número no entero mayor a 1
+const Q: f32 = 0.5;
 
-  const A: f32 = 19.191919; // Cualquier número no entero mayor que 1
-  state = {
-    let x = state+A;
-    (x*x).fract()
+
+#[derive(Default)]
+pub struct StateVariable {
+  q: f32, f: f32,
+  l: f32, b: f32
+}
+impl StateVariable {
+  pub fn set_params(&mut self, q: f32, fc: f32, fs: f32) {
+    let f = fc.min(fs/4.0);
+    self.q = q;
+    self.f = 2.0*(PI*f/fs).sin();
   }
-*/
+  // Devuelve un trío con (lowpass, bandpass, highpass)
+  pub fn clock (&mut self, s: f32) -> (f32, f32, f32) {
+    let h = s-self.l-self.b*self.q;
+    self.b += self.f*h;
+    self.l += self.f*self.b;
+    (self.l, self.b, h)
+  }
+}
 
 #[derive(Clone,Copy, PartialEq, Eq)]
 pub enum State { Attack, Hold, Decay, Off }
 impl Default for State { fn default () -> Self { State::Off } }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Default)]
 pub struct Osc {
   pub phase: f32,
   pub delta: f32,
   pub vol: f32,
   pub click: f32,
   pub state: State,
+  pub filter: StateVariable,
 }
 
 impl Osc {
@@ -60,13 +79,12 @@ impl Osc {
   }
 
   pub fn is_active (&self) -> bool {
-    self.state != State::Off && self.click < 0.01
+    self.state != State::Off || self.click > 0.01
   }
 }
 
 pub struct Hammond {
   sample_rate: f32,
-
   sustain: f32,
   click: f32,
 
@@ -75,27 +93,26 @@ pub struct Hammond {
   decay: f32,
   click_gain: f32,
 
+  noise: f32,
+  gain_sum: f32,
+
   gains: [f32; WHEEL_COUNT],
   table: [f32; TABLE_SIZE],
 }
-
-// Todas estas están en segundos
-const ATTACK: f32 = 0.005;
-const CLICK:  f32 = 0.01;
-const MIN_DECAY: f32 = 0.005;
-const MAX_DECAY: f32 = 1.0;
 
 impl Hammond {
   pub fn new () -> Self {
     Hammond {
       sample_rate: 0.0,
-
       sustain: 0.0,
       click: 0.0,
 
       attack: 0.0,
       decay: 0.0,
       click_gain: 0.0,
+
+      noise: 0.0,
+      gain_sum: 0.0,
 
       gains: [0.0; WHEEL_COUNT],
       table: [0.0; TABLE_SIZE],
@@ -113,9 +130,10 @@ impl Hammond {
   pub fn set_sustain (&mut self, value: f32) {
     self.sustain = value;
     let time = lerp(MIN_DECAY, MAX_DECAY, value);
-    let samples = time * self.sample_rate;
-    self.decay = 1.0 / samples;
+    self.decay = 0.1_f32.powf(1.0 / (time * self.sample_rate));
   }
+
+  pub fn set_noise (&mut self, value: f32) { self.noise = value-0.5; }
 
   pub fn set_click (&mut self, value: f32) { self.click = value; }
 
@@ -129,6 +147,9 @@ impl Hammond {
   }
 
   fn regen (&mut self) {
+    self.gain_sum = self.gains.iter().zip(weights.iter())
+      .map(|(a, b)| a*b ).sum();
+
     for i in 0..TABLE_SIZE {
       let i_ph = i as f32 / TABLE_SIZE as f32;
       let mut s = 0.0;
@@ -151,8 +172,9 @@ impl Hammond {
         }
       },
       State::Decay => {
-        osc.vol -= self.decay;
-        if osc.vol <= 0.0 {
+        osc.vol *= self.decay;
+        // 0.001 amplitud = -40dB
+        if osc.vol <= 0.01 {
           osc.vol = 0.0;
           osc.state = State::Off;
         }
@@ -172,7 +194,10 @@ impl Hammond {
       osc.phase -= F_TABLE_SIZE
     }
 
-    sample * osc.vol
+    let (_, click, _) = osc.filter.clock(self.noise * osc.click);
+    osc.click *= self.click_gain;
+
+    sample*osc.vol + click
   }
 
   // Necesito recibir delta en vez de freq o note, porque
@@ -183,14 +208,18 @@ impl Hammond {
     osc.delta = freq*0.25*F_TABLE_SIZE/self.sample_rate;
     osc.phase = 0.0;
     osc.vol = 0.0;
-    osc.click = self.click;
+    osc.click = self.click * CLICK_START * self.gain_sum;
     osc.state = State::Attack;
+
+    let click_f = 200.0+freq/2.0;
+    osc.filter.set_params(Q, click_f, self.sample_rate);
   }
 
   pub fn note_off (&self, osc: &mut Osc) {
     osc.click =
       if self.sustain == 0.0
-      { self.click } else { 0.0 };
+      { self.click * CLICK_END * self.gain_sum }
+      else { 0.0 };
     osc.state = State::Decay;
   }
 

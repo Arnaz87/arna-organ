@@ -19,7 +19,26 @@ const wheel_harmonics: [f32; WHEEL_COUNT] = [
   1.0, 3.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0
 ];
 
-#[derive(Default, Copy, Clone)]
+static mut rand: u16 = 0;
+// el módulo es 2^16
+
+// Debe ser coprimo de 2^16
+static mut C: u16 = 165; // 3*5*11
+
+#[derive(Default)]
+struct Noise { x: u16 }
+impl Noise {
+  // Debe ejecutarse máximo una vez por sample,
+  // porque tiene un periodo de 1.48 segundos
+  fn clock (&mut self) -> f32 {
+    self.x = self.x
+      .wrapping_mul(4005) // 2*2*7*11*13 + 1
+      .wrapping_add(165); // 3*5*11
+    (self.x as f32) / (::std::u16::MAX as f32)
+  }
+}
+
+#[derive(Default)]
 struct Voice {
   pub gain: f32,
   pub freq: f32,
@@ -50,6 +69,8 @@ pub struct Organ {
   vibrato: Vibrato,
   leslie: Leslie,
   room: Room,
+
+  noise: Noise,
 }
 
 macro_rules! zip {
@@ -91,6 +112,8 @@ impl Synth for Organ {
       vibrato: Vibrato::new(),
       leslie: Leslie::new(),
       room: Room::new(),
+
+      noise: Default::default(),
     }
   }
 
@@ -104,6 +127,9 @@ impl Synth for Organ {
 
   fn clock(&mut self) -> (f32, f32) {
     let mut smpl = 0_f32;
+
+    let noise = self.noise.clock();
+    self.hammond.set_noise(noise);
 
     for voice in self.voices.iter_mut() {
       let mut v_smpl = 0.0;
@@ -140,7 +166,6 @@ impl Synth for Organ {
     
     let (l, r) = self.leslie.run(smpl);
     let (l, r) = self.room.clock(l, r);
-
     (l, r)
   }
 
@@ -177,14 +202,19 @@ impl Synth for Organ {
 
       0 => 0.2, // Warm
 
-      21 => 1.0,
+      /*21 => 1.0,
       22 => 0.95,
       23 => 0.9,
       24 => 0.85,
       25 => 0.8,
       26 => 0.7,
       27 => 0.6,
-      28 => 0.5,
+      28 => 0.5,*/
+
+      20 => 1.0,
+
+      21 => 0.4,
+      22 => 0.1,
 
       _ => 0.0
     }

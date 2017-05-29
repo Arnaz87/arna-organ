@@ -19,7 +19,7 @@ impl Editor for Gui {
   fn size () -> (usize, usize) { (550, 330) }
 
   fn new (synth: Channel, win: gui::Handler) -> Gui {
-    let background = gui::Image::load("assets/background.png").unwrap();
+    /*let background = gui::Image::load("assets/background.png").unwrap();
     let knob_img = gui::Image::load("assets/knob.png").unwrap();
     let drawbar_img = gui::Image::load("assets/drawbar-red.png").unwrap();
 
@@ -112,6 +112,11 @@ impl Editor for Gui {
         //drawbar!(255, 89, 29),
       ],
       background: background,
+    }*/
+
+    Gui {
+      controls: vec![],
+      background: unsafe { ::std::mem::uninitialized() }
     }
   }
 
