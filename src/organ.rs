@@ -11,7 +11,7 @@ use hammond::{Hammond, Osc as HOsc};
 use pipe::{Pipe, Osc as POsc};
 
 const WHEEL_COUNT: usize = 8;
-const PIPE_COUNT: usize = 0;
+const PIPE_COUNT: usize = 1;
 const PIPE_PARAMS: usize = 6;
 const FIRST_PARAMS: usize = 21;
 
@@ -125,6 +125,7 @@ impl Synth for Organ {
     self.room.set_sample_rate(arch.sample_rate);
   }
 
+  #[inline]
   fn clock(&mut self) -> (f32, f32) {
     let mut smpl = 0_f32;
 
@@ -136,25 +137,8 @@ impl Synth for Organ {
 
       v_smpl += self.hammond.run(&mut voice.main_osc);
 
-      // Voice sample
-      let s = {
-        let delta = voice.freq / self.sample_rate;
-        let s = mod1(voice.sample + delta);
-        voice.sample = s;
-        s // Return local s
-      };
-
-      for (osc, pipe) in zip!(mut voice.pipe_oscs, self.pipes) {
-        // IMPORTANTE:
-        // Creo que Rust tiene un bug.
-        // Si activo está linea, el programa se pone raro y deja de sonar
-
-        //if pipe.gain > 0.0 {
-          pipe.envelope(osc, self.sample_rate);
-          let s = mod1(s * pipe.harm);
-          let vol = pipe.gain * osc.vol;
-          v_smpl += pipe.sample(s) * vol;
-        //}
+      for (mut osc, pipe) in zip!(mut voice.pipe_oscs, self.pipes) {
+        v_smpl += pipe.clock(&mut osc);
       }
 
       smpl += v_smpl * voice.gain;
@@ -165,21 +149,20 @@ impl Synth for Organ {
     smpl = self.vibrato.run(smpl);
     
     let (l, r) = self.leslie.run(smpl);
-    let (l, r) = self.room.clock(l, r);
+    //let (l, r) = self.room.clock(l, r);
     (l, r)
   }
 
   fn note_on(&mut self, note: u8, vel: u8) {
     let mut voice = self.voices.note_on(note);
 
-    // A4 es la nota midi 57, y está estandarizado como 440Hz
-    let freq = 440.0 * 2_f32.powf((note as f32 - 57.0) / 12.0);
+    let freq = 440.0 * 2_f32.powf((note as f32 - 69.0) / 12.0);
 
     voice.gain = vel as f32 / 256.0;
     self.hammond.note_on(&mut voice.main_osc, freq);
 
-    for osc in voice.pipe_oscs.iter_mut() {
-      osc.on()
+    for (mut osc, pipe) in zip!(mut voice.pipe_oscs, self.pipes) {
+      pipe.note_on(&mut osc, freq / self.sample_rate);
     }
   }
 
@@ -187,18 +170,13 @@ impl Synth for Organ {
     match self.voices.note_off(note) {
       Some(voice) => {
         self.hammond.note_off(&mut voice.main_osc);
-        for osc in voice.pipe_oscs.iter_mut() {
-          osc.release()
-        }
+        for osc in voice.pipe_oscs.iter_mut() { osc.release() }
       }, _ => {}
     }
   }
 
   fn param_default(index: usize) -> f32 {
     match index {
-      //14 => 1.0, // Room Size
-      //19 => 1.0, // Room Mix
-      //20 => 0.1, // Click
 
       0 => 0.2, // Warm
 
@@ -211,10 +189,13 @@ impl Synth for Organ {
       27 => 0.6,
       28 => 0.5,*/
 
-      20 => 1.0,
+      20 => 0.0,
 
       21 => 0.4,
       22 => 0.1,
+
+      29 => 1.0,
+      31 => 0.5,
 
       _ => 0.0
     }
@@ -301,17 +282,16 @@ impl Synth for Organ {
         let i = index - FIRST_PARAMS;
         if i < WHEEL_COUNT {
           self.hammond.set_gain(i, value);
-          //self.wheel_gains[i] = value;
         } else {
           let i = i - WHEEL_COUNT;
           let pipe = &mut self.pipes[i/PIPE_PARAMS];
           match i%PIPE_PARAMS {
             0 => pipe.gain = value,
             1 => pipe.set_harm(value),
-            2 => {pipe.warm = value; pipe.regen();},
-            3 => {pipe.cold = value; pipe.regen();},
-            4 => pipe.attack = value,
-            5 => pipe.release = value,
+            2 => {pipe.color = value; pipe.regen();},
+            3 => {},
+            4 => {pipe.attack  = value; pipe.calc_params(self.sample_rate);},
+            5 => {pipe.release = value; pipe.calc_params(self.sample_rate);},
             _ => unreachable!()
           }
 

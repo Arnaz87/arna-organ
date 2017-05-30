@@ -124,13 +124,13 @@ impl Hammond {
     self.attack = 1.0 / (ATTACK * sr);
     let sust = self.sustain;
     self.set_sustain(sust);
-    self.click_gain = 0.1_f32.powf(1.0 / (CLICK * sr));
+    self.click_gain = db2amp(-20.0).powf(1.0 / (CLICK * sr));
   }
 
   pub fn set_sustain (&mut self, value: f32) {
     self.sustain = value;
     let time = lerp(MIN_DECAY, MAX_DECAY, value);
-    self.decay = 0.1_f32.powf(1.0 / (time * self.sample_rate));
+    self.decay = db2amp(-20.0).powf(1.0 / (time * self.sample_rate));
   }
 
   pub fn set_noise (&mut self, value: f32) { self.noise = value-0.5; }
@@ -154,8 +154,8 @@ impl Hammond {
       let i_ph = i as f32 / TABLE_SIZE as f32;
       let mut s = 0.0;
       for w in 0..WHEEL_COUNT {
-        let ph = mod1(i_ph * harmonics[w]);
-        let vol = self.gains[w] * weights[w];
+        let ph = (i_ph * harmonics[w]) % 1.0;
+        let vol = self.gains[w];
         s += self.sample(ph) * vol;
       }
       self.table[i] = s;
@@ -173,8 +173,8 @@ impl Hammond {
       },
       State::Decay => {
         osc.vol *= self.decay;
-        // 0.001 amplitud = -40dB
-        if osc.vol <= 0.01 {
+        // 0.0001 amplitud = -80dB
+        if osc.vol <= 0.0001 {
           osc.vol = 0.0;
           osc.state = State::Off;
         }
@@ -203,9 +203,10 @@ impl Hammond {
   // Necesito recibir delta en vez de freq o note, porque
   // desde aquí no tengo el sample_rate
   pub fn note_on(&self, osc: &mut Osc, freq: f32) {
-    // delta está calculado para A4 en 440Hz, pero eso es muy
-    // agudo para un Hammond, así que le bajo 2 octavas.
-    osc.delta = freq*0.25*F_TABLE_SIZE/self.sample_rate;
+    // Los armónicos del hammond están descritos para el tw
+    // de 16', pero supuestamente el fundamental es el de 8',
+    // por eso debo bajar una octava.
+    osc.delta = freq*0.5*F_TABLE_SIZE/self.sample_rate;
     osc.phase = 0.0;
     osc.vol = 0.0;
     osc.click = self.click * CLICK_START * self.gain_sum;
@@ -223,8 +224,8 @@ impl Hammond {
     osc.state = State::Decay;
   }
 
-  pub fn set_gain(&mut self, index: usize, gain: f32) {
-    self.gains[index] = gain;
+  pub fn set_gain(&mut self, index: usize, g: f32) {
+    self.gains[index] = gain2amp(g);
     self.regen();
   }
 }

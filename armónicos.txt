@@ -1,0 +1,74 @@
+# Tubos
+
+La lista de armónicos original está en
+http://www.die-orgelseite.de/fusszahlen_e.htm
+
+Aunque el sonido más bajo es el de 32', el fundamental es 8' y los armónicos
+son los de esa. Si no es una armónica de la fundamental, se expresa
+como fracción.
+Python para encontrar armónicos:
+
+def h(i, f=0):
+  x = 8/(i+f)
+  if x%1==0: return "%i" % x
+  if x*2%1==0: return "%i/2" % (x*2)
+  if x*4%1==0: return "%i/4" % (x*4)
+  if x*8%1==0: return "%i/8" % (x*8)
+
+Tamaño  fracción decimal
+
+Suboctavas: 5
+
+32      1/4   0.25
+21 1/3  3/8   0.375
+16      1/2   0.5
+12 4/5  5/8   0.625
+10 2/3  3/4   0.75
+
+Primera octava: 4
+8'      1     1.0
+6 2/5   5/4   1.25
+5 1/3   3/2   1.5
+4 4/7   7/4   1.75
+
+Segunda octava: 6
+4       2     2.0
+3 1/5   5/2   2.5
+2 10/11 11/4  2.75
+2 2/3   3     3.0
+2 6/13  13/4  3.25
+2 2/7   7/2   3.5
+
+Tercera octava: 7
+2       4     4.0
+1 7/9   9/2   4.5
+1 3/5   5     5.0
+1 5/11  11/2  5.5
+1 1/3   6     6.0
+1 3/13  13/2  6.5
+1 1/7   7     7.0
+
+Cuarta octava: 7
+1       8
+8/9     9
+4/5     10
+8/11    11
+2/3     12
+8/13    13
+4/7     14
+
+Quinta octava: 4
+1/2     16
+2/5     20
+1/3     24
+2/7     28
+
+Sexta octava: 3
+1/4     32
+1/5     40
+1/6     48
+
+Super octava
+1/8     64
+
+Total: 5+4+6+7+7+4+3+1 = 37
