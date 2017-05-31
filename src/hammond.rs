@@ -225,7 +225,7 @@ impl Hammond {
   }
 
   pub fn set_gain(&mut self, index: usize, g: f32) {
-    self.gains[index] = gain2amp(g);
+    self.gains[index] = db2amp(10.0 * g.log2());
     self.regen();
   }
 }

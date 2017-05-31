@@ -102,6 +102,7 @@ impl Pipe {
       x if x < 0.5 => (0.0, (0.5-x) * 2.0 * COLD ),
       _ => (0.0, 0.0)
     };
+    let (warm, cold) = (warm*warm, cold*cold);
 
     for i in 0..TABLE_SIZE {
       let s = i as f32 / F_TABLE_SIZE;

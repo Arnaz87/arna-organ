@@ -6,12 +6,13 @@ use arnaudio::voice;
 use effects::vibrato::Vibrato;
 use effects::leslie::Leslie;
 use effects::room::Room;
+use effects::Waver;
 
 use hammond::{Hammond, Osc as HOsc};
 use pipe::{Pipe, Osc as POsc};
 
 const WHEEL_COUNT: usize = 8;
-const PIPE_COUNT: usize = 1;
+const PIPE_COUNT: usize = 3;
 const PIPE_PARAMS: usize = 6;
 const FIRST_PARAMS: usize = 21;
 
@@ -69,6 +70,7 @@ pub struct Organ {
   vibrato: Vibrato,
   leslie: Leslie,
   room: Room,
+  waver: Waver,
 
   noise: Noise,
 }
@@ -105,24 +107,27 @@ impl Synth for Organ {
       hammond: Hammond::new(),
 
       wheel_gains: [0.0; WHEEL_COUNT],
-      pipes: [Default::default(); PIPE_COUNT],
+      pipes: Default::default(),
 
       voices: Default::default(),
 
       vibrato: Vibrato::new(),
       leslie: Leslie::new(),
       room: Room::new(),
+      waver: Waver::new(),
 
       noise: Default::default(),
     }
   }
 
   fn arch_change(&mut self, arch: Architecture) {
-    self.sample_rate = arch.sample_rate;
-    self.hammond.set_sample_rate(arch.sample_rate);
-    self.vibrato.set_sample_rate(arch.sample_rate);
-    self.leslie.set_sample_rate(arch.sample_rate);
-    self.room.set_sample_rate(arch.sample_rate);
+    let fs = arch.sample_rate;
+    self.sample_rate = fs;
+    self.hammond.set_sample_rate(fs);
+    self.vibrato.set_sample_rate(fs);
+    self.leslie.set_sample_rate(fs);
+    self.room.set_sample_rate(fs);
+    self.waver.set_sample_rate(fs);
   }
 
   #[inline]
@@ -146,9 +151,12 @@ impl Synth for Organ {
 
     smpl = smpl*self.gain;
 
-    smpl = self.vibrato.run(smpl);
+    //smpl = self.vibrato.run(smpl);
+
+    smpl = self.waver.clock(smpl);
+    let (l, r) = (smpl, smpl);
     
-    let (l, r) = self.leslie.run(smpl);
+    //let (l, r) = self.leslie.run(smpl);
     //let (l, r) = self.room.clock(l, r);
     (l, r)
   }
@@ -218,8 +226,9 @@ impl Synth for Organ {
 
       10 => "Leslie Tremolo Separation".to_string(),
       11 => "Leslie Vibrato Separation".to_string(),
-      12 => "Leslie Stereo".to_string(),
-      13 => "Leslie Mix".to_string(),
+
+      12 => "Waver Depth".to_string(),
+      13 => "Waver Mix".to_string(),
 
       14 => "Room Size".to_string(),
       15 => "Room Diff 1".to_string(),
@@ -266,9 +275,9 @@ impl Synth for Organ {
       9 => self.leslie.stereo = value,
       10 => {},//self.leslie.vol_sep = value,
       11 => {},//self.leslie.vib_sep = value,
-      12 => {},//self.leslie.stereo = value,
-      //12 => self.leslie.set_split(value),
-      13 => {},//self.leslie.mix = value,
+
+      12 => self.waver.set_depth(value),
+      13 => {},
 
       14 => self.room.set_size(value),
       15 => self.room.diff1 = value,
