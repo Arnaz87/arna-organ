@@ -153,7 +153,7 @@ impl Synth for Organ {
 
     //smpl = self.vibrato.run(smpl);
 
-    smpl = self.waver.clock(smpl);
+    //smpl = self.waver.clock(smpl);
     let (l, r) = (smpl, smpl);
     
     //let (l, r) = self.leslie.run(smpl);
@@ -170,7 +170,7 @@ impl Synth for Organ {
     self.hammond.note_on(&mut voice.main_osc, freq);
 
     for (mut osc, pipe) in zip!(mut voice.pipe_oscs, self.pipes) {
-      pipe.note_on(&mut osc, freq / self.sample_rate);
+      pipe.note_on(&mut osc, freq, self.sample_rate);
     }
   }
 
@@ -197,13 +197,15 @@ impl Synth for Organ {
       27 => 0.6,
       28 => 0.5,*/
 
+      12 => 1.0,
+
       20 => 0.0,
 
       21 => 0.4,
       22 => 0.1,
 
       29 => 1.0,
-      31 => 0.5,
+      31 => 1.0,
 
       _ => 0.0
     }
@@ -248,8 +250,8 @@ impl Synth for Organ {
           format!("Pipe {} {}", pipe, match i%PIPE_PARAMS {
             0 => "Gain",
             1 => "Harm",
-            2 => "Warm",
-            3 => "Cold",
+            2 => "Color",
+            3 => "_",
             4 => "Attack",
             5 => "Release",
             _ => unreachable!()
@@ -297,7 +299,7 @@ impl Synth for Organ {
           match i%PIPE_PARAMS {
             0 => pipe.gain = value,
             1 => pipe.set_harm(value),
-            2 => {pipe.color = value; pipe.regen();},
+            2 => pipe.set_color(value),
             3 => {},
             4 => {pipe.attack  = value; pipe.calc_params(self.sample_rate);},
             5 => {pipe.release = value; pipe.calc_params(self.sample_rate);},
