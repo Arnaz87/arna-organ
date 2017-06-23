@@ -184,7 +184,7 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
     self.synth.lock().unwrap().arch_change(self.arch);
   }
 
-  fn process(&mut self, buffer: AudioBuffer<f32>){
+  fn process(&mut self, buffer: AudioBuffer<f32>) {
     let (_, mut outputs) = buffer.split();
 
     let (mut hd, mut tl) = outputs.split_at_mut(1);
@@ -272,8 +272,8 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
   }
 
   fn get_editor (&mut self) -> Option<&mut VstEditor> {
-    None
-    //Some(&mut self.editor)
+    //None
+    Some(&mut self.editor)
   }
 }
 

@@ -1,3 +1,4 @@
+#![feature(conservative_impl_trait)]
 #![allow(unused_imports,unused_variables,dead_code)]
 
 #[macro_use]

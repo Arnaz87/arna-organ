@@ -162,8 +162,10 @@ unsafe extern "system" fn window_proc(
 
   macro_rules! mouse_ev {
     ($ev:ident, $btn:ident) => {
+      let x = winapi::windowsx::GET_X_LPARAM(l_param) as i32;
+      let y = winapi::windowsx::GET_Y_LPARAM(l_param) as i32;
       get_window!(win, {
-        win.event(::Event::$ev(::MouseBtn::$btn));
+        win.event(::Event::$ev(::MouseBtn::$btn, x, y));
       });
     };
     ($ev:ident) => {

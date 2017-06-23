@@ -48,8 +48,8 @@ pub enum MouseBtn {R, L, M}
 #[derive(Debug, Copy, Clone)]
 pub enum Event {
   MouseMove(i32, i32),
-  MouseUp(MouseBtn),
-  MouseDown(MouseBtn),
+  MouseUp(MouseBtn, i32, i32),
+  MouseDown(MouseBtn, i32, i32),
 }
 
 pub trait Component {

@@ -115,21 +115,23 @@ impl<P: Painter, F: Fn(f32)> Component for Slider<P, F> {
           };
 
           self.set_value(value);
+          self.mouse_x = x;
+          self.mouse_y = y;
         }
-        self.mouse_x = x;
-        self.mouse_y = y;
       },
-      ::Event::MouseDown(::MouseBtn::L) => {
+      ::Event::MouseDown(::MouseBtn::L, x, y) => {
         if !self.active &&
-          self.mouse_x > self.x &&
-          self.mouse_x < self.x + self.w &&
-          self.mouse_y > self.y &&
-          self.mouse_y < self.y + self.h {
+          x > self.x &&
+          x < self.x + self.w &&
+          y > self.y &&
+          y < self.y + self.h {
+          self.mouse_x = x;
+          self.mouse_y = y;
           self.handler.capture();
           self.active = true;
         }
       },
-      ::Event::MouseUp(::MouseBtn::L) => {
+      ::Event::MouseUp(::MouseBtn::L, _, _) => {
         if self.active {
           self.handler.release();
           self.active = false;
