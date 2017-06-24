@@ -129,7 +129,7 @@ pub struct Gui {
   controls: Vec<Option<Control>>,
 
   /// Índices de los controles que siempre están visibles
-  main_controls: [usize; 21],
+  main_controls: [usize; 28],
 
   pipe_tabs: TabGroup,
 
@@ -251,6 +251,10 @@ impl Editor for Gui {
         knob!(235, 30, 6),
 
         // Leslie
+        knob!(295, 30, 7),
+        knob!(335, 30, 8),
+        knob!(415, 30, 9),
+        //knob!(375, 30, 10), // Dummy
 
         // Room
         knob!(475, 150, 14),
@@ -267,35 +271,38 @@ impl Editor for Gui {
         drawbar!(180, 89, 26),
         drawbar!(205, 89, 27),
         drawbar!(230, 89, 28),
-        //drawbar!(255, 89, 29),
+        drawbar!(255, 89, 29),
 
         // Wheel Drawbars
-        drawbar!(325, 89, 29),
-        drawbar!(350, 89, 35),
-        /*drawbar!(375, 89, 23),
-        drawbar!(400, 89, 24),
-        drawbar!(425, 89, 25),*/
+        drawbar!(325, 89, 30),
+        drawbar!(350, 89, 36),
+        drawbar!(375, 89, 42),
+        drawbar!(400, 89, 48),
+        drawbar!(425, 89, 54),
     ];
 
+    macro_rules! pipe_tab {
+      ($i:expr) => {
+        Tab::new(
+          btn_img.clone(),
+          (322+ $i*25, 135), (18, 12),
+          (18*$i, 0), (18*$i, 12),
+          vec![
+            knob!(315, 225, $i*6 + 31),
+            knob!(355, 225, $i*6 + 32),
+            knob!(435, 225, $i*6 + 34),
+            knob!(475, 225, $i*6 + 35),
+          ]
+        )
+      }
+    }
+
     let mut pipe_tabs = TabGroup::new(win.clone(), vec![
-      Tab::new(
-        btn_img.clone(),
-        (322, 135), (18, 12),
-        (0, 0), (0, 12),
-        vec![
-          knob!(315, 225, 30),
-          knob!(355, 225, 31),
-        ]
-      ),
-      Tab::new(
-        btn_img.clone(),
-        (347, 135), (18, 12),
-        (18, 0), (18, 12),
-        vec![
-          knob!(315, 225, 36),
-          knob!(355, 225, 37),
-        ]
-      )
+      pipe_tab!(0),
+      pipe_tab!(1),
+      pipe_tab!(2),
+      pipe_tab!(3),
+      pipe_tab!(4),
     ]);
 
     Gui {

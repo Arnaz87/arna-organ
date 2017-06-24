@@ -3,14 +3,14 @@ use helpers::*;
 
 const TABLE_SIZE: usize = 128;
 const F_TABLE_SIZE: f32 = TABLE_SIZE as f32;
-pub const WHEEL_COUNT: usize = 8;
+pub const WHEEL_COUNT: usize = 9;
 
 const harmonics: [f32; WHEEL_COUNT] = [
-  1.0, 3.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0//, 16.0
+  1.0, 3.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 16.0
 ];
 
 const weights: [f32; WHEEL_COUNT] = [
-  1.5, 1.0, 0.8, 0.8, 0.8, 0.8, 0.8, 0.6//, 0.6
+  1.5, 1.0, 0.8, 0.8, 0.8, 0.8, 0.8, 0.6, 0.6
 ];
 
 // Todas estas están en segundos. Decay y Click indican el

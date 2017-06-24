@@ -11,20 +11,10 @@ use effects::Waver;
 use hammond::{Hammond, Osc as HOsc};
 use pipe::{Pipe, Osc as POsc};
 
-const WHEEL_COUNT: usize = 8;
-const PIPE_COUNT: usize = 3;
+const WHEEL_COUNT: usize = 9;
+const PIPE_COUNT: usize = 5;
 const PIPE_PARAMS: usize = 6;
 const FIRST_PARAMS: usize = 21;
-
-const wheel_harmonics: [f32; WHEEL_COUNT] = [
-  1.0, 3.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0
-];
-
-static mut rand: u16 = 0;
-// el módulo es 2^16
-
-// Debe ser coprimo de 2^16
-static mut C: u16 = 165; // 3*5*11
 
 #[derive(Default)]
 struct Noise { x: u16 }
@@ -151,13 +141,13 @@ impl Synth for Organ {
 
     smpl = smpl*self.gain;
 
-    //smpl = self.vibrato.run(smpl);
+    smpl = self.vibrato.run(smpl);
 
     //smpl = self.waver.clock(smpl);
     let (l, r) = (smpl, smpl);
     
     //let (l, r) = self.leslie.run(smpl);
-    //let (l, r) = self.room.clock(l, r);
+    let (l, r) = self.room.clock(l, r);
     (l, r)
   }
 
@@ -204,8 +194,13 @@ impl Synth for Organ {
       21 => 0.4,
       22 => 0.1,
 
-      29 => 1.0,
-      31 => 1.0,
+      30 => 1.0,
+
+      32 => 0.6,
+      38 => 0.5,
+      45 => 0.5,
+      50 => 0.5,
+      56 => 0.5,
 
       _ => 0.0
     }

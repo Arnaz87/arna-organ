@@ -154,7 +154,7 @@ impl Pipe {
       Form::Sine => sin01(ph),
     };
 
-    osc.phase += osc.delta;
+    osc.phase += osc.delta * self.harm;
     if osc.phase >= 1.0 { osc.phase -= 1.0; }
 
     sample * osc.vol * self.gain
@@ -174,7 +174,7 @@ impl Pipe {
 
     osc.phase = 0.0;
     osc.vol = 0.0;
-    osc.delta = freq*self.harm/fs;
+    osc.delta = freq/fs;
     osc.bright = 64.0/freq;
     osc.state = State::Attack;
   }
