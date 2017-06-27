@@ -259,7 +259,7 @@ impl Editor for Gui {
         // Room
         knob!(475, 150, 14),
         knob!(475, 110, 15),
-        knob!(475,  70, 18), // Decay, por ahora diff2, o delay (?
+        knob!(475,  70, 18),
         knob!(475,  30, 19),
 
         // TW Drawbars

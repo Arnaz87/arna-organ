@@ -29,6 +29,8 @@ impl Noise {
   }
 }
 
+static mut ns: f32 = 0.0;
+
 #[derive(Default)]
 struct Voice {
   pub gain: f32,
@@ -139,6 +141,11 @@ impl Synth for Organ {
       smpl += v_smpl * voice.gain;
     }
 
+    /*unsafe {
+      smpl = ns;
+      if ns != 0.0 { ns = 0.0; }
+    }*/
+
     smpl = smpl*self.gain;
 
     smpl = self.vibrato.run(smpl);
@@ -146,12 +153,13 @@ impl Synth for Organ {
     //smpl = self.waver.clock(smpl);
     let (l, r) = (smpl, smpl);
     
-    //let (l, r) = self.leslie.run(smpl);
+    let (l, r) = self.leslie.run(smpl);
     let (l, r) = self.room.clock(l, r);
     (l, r)
   }
 
   fn note_on(&mut self, note: u8, vel: u8) {
+    unsafe { ns = 1.0; }
     let mut voice = self.voices.note_on(note);
 
     let freq = 440.0 * 2_f32.powf((note as f32 - 69.0) / 12.0);
@@ -201,6 +209,11 @@ impl Synth for Organ {
       45 => 0.5,
       50 => 0.5,
       56 => 0.5,
+
+      14 => 0.7,
+      15 => 1.0,
+      18 => 0.2,
+      19 => 0.2,
 
       _ => 0.0
     }
@@ -277,10 +290,10 @@ impl Synth for Organ {
       13 => {},
 
       14 => self.room.set_size(value),
-      15 => self.room.diff1 = value,
-      16 => self.room.diff2 = value,
-      17 => self.room.set_feedback(value),
-      18 => self.room.delay = value,
+      15 => self.room.set_diffuse(value),
+      16 => {}, //self.room.diff2 = value,
+      17 => {}, //self.room.set_feedback(value),
+      18 => {self.room.delay = value; self.room.recalc_delay()},
       19 => self.room.mix = value,
 
       20 => self.hammond.set_click(value),

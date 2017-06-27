@@ -1,6 +1,7 @@
 
 use sample::*;
 use effects::buffer::*;
+use helpers::*;
 
 // Pulse Stuff
   #[derive(Clone, Copy)]
@@ -18,7 +19,7 @@ use effects::buffer::*;
         side: Side::$side,
         gain: $gain,
         // Restar los samples que la difusión retrasa, y convertirlo a Segundos
-        delay: ( $delay )/44100.0,
+        delay: ( $delay - 7200.0 ) / 44100.0,
       }
     };
     ($side:ident, $delay:expr) => {
@@ -26,11 +27,13 @@ use effects::buffer::*;
     }
   }
 
-  const PULSES: [Pulse; 16] = [
-    pulse!(NL, 2577.0, 0.7),
-    pulse!(NR, 2771.0, 0.7),
-    pulse!(L, 4252.0, 1.0),
-    pulse!(R, 4581.0, 1.0),
+  const PULSES: [Pulse; 14] = [
+    //pulse!(NL, 2577.0, 0.7),
+    //pulse!(NR, 2771.0, 0.7),
+
+    //pulse!(L, 4252.0, 1.0),
+    //pulse!(R, 4581.0, 1.0),
+
     pulse!(R, 7200.0, 0.6),
     pulse!(NL, 7988.0, 0.6),
     pulse!(NR, 10552.0, 0.3),
@@ -43,20 +46,26 @@ use effects::buffer::*;
     pulse!(R, 20714.0, 0.0),
     pulse!(NL, 24257.0, 0.0),
     pulse!(NR, 24652.0, 0.0),
+    pulse!(L, 24652.0 + 3398.0, 1.0),
+    pulse!(R, 24652.0 + 3398.0 + 329.0, 1.0),
   ];
+
+  const MAX_PULSE: f32 = 23798.0/44100.0;
 // End Pulse Stuff
 
-// Feedback Stuff
-  struct Feedback {
+// Allpass
+  // Basado en el Allpass de Freeverb
+
+  struct Allpass {
     delay: f32,
     feedback: f32,
     size: f32,
     buffer: Buffer<Sample>,
   }
 
-  impl Feedback {
-    pub fn new (delay: f32, feedback: f32) -> Feedback {
-      Feedback {
+  impl Allpass {
+    pub fn new (delay: f32, feedback: f32) -> Self {
+      Allpass {
         delay: delay,
         feedback: feedback,
         size: 1.0,
@@ -71,23 +80,19 @@ use effects::buffer::*;
       self.buffer.init(self.delay, sample_rate);
     }
 
-    pub fn clock (&mut self, orig: Sample) -> Sample {
+    pub fn clock (&mut self, input: Sample) -> Sample {
       let bufout = self.buffer.get(self.delay * self.size);
-      let current = orig + bufout.scale(self.feedback);
-      self.buffer.push(current);
-      // No puedo devolver la señal actual porque ahí está la original,
-      // y si lo hago todos los feedbacks sumarían su propia original
-      bufout
+      self.buffer.push(input + bufout.scale(self.feedback));
+      bufout - input
     }
   }
-// End Feedback Stuff
+
+// End Allpass
 
 pub struct Room {
   pub size: f32,
-  pub diff1: f32,
-  pub diff2: f32,
 
-  feedback: f32,
+  pub diff: f32,
 
   pub delay: f32,
 
@@ -95,81 +100,136 @@ pub struct Room {
 
   sample_rate: f32,
 
-  orig_buf: Buffer<f32>,
+  /// Early reflections
+  er_buf: Buffer<Sample>,
 
-  delay_buf_1: Buffer<Sample>,
+  /// Mono buffer for the repeating pulses
+  pulse_buf: Buffer<f32>,
 
-  fb1: Feedback,
-  fb2: Feedback,
-  fb3: Feedback,
-  fb4: Feedback,
+  ap1: Allpass,
+  ap2: Allpass,
+  ap3: Allpass,
+  ap4: Allpass,
 
-  fb_buf: Buffer<Sample>,
+  gains: [f32; 7],
+  rep_gain: f32,
+  rep_delay: f32,
 }
 
 impl Room {
   pub fn new () -> Room {
     Room {
       size: 1.0,
-      diff1: 1.0,
-      diff2: 1.0,
-      feedback: 0.6,
       delay: 0.0,
+      diff: 1.0,
       mix: 0.0,
 
       sample_rate: 1.0,
-      orig_buf: Buffer::new(),
+      pulse_buf: Buffer::new(),
 
-      delay_buf_1: Buffer::new(),
+      er_buf: Buffer::new(),
 
-      fb1: Feedback::new(235.0/44100.0, 0.6),
-      fb2: Feedback::new(313.0/44100.0, 0.6),
-      fb3: Feedback::new(610.0/44100.0, 0.6),
-      fb4: Feedback::new(835.0/44100.0, 0.6),
+      // FL Reverb:  313 835 1148 - 235 610 845
 
-      fb_buf: Buffer::new(),
+      // FL Studio:     235 313 610 835
+      // Freeverb:      225 341 441 556 (El peor)
+      // Mda Ambiance:  107 142 227 379
+      // Mda Amb. x 2:  214 284 454 758 (El mejor)
+
+      /* Factores de Mda Ambiance:
+        107: 107
+        142: 2*71
+        227: 227
+        379: 379
+
+        x4 +3
+
+        431: 431
+        571: 571
+        901: 17*53
+        1519: 7*7*31
+      */
+
+      ap1: Allpass::new(431.0/44100.0, 0.6),
+      ap2: Allpass::new(571.0/44100.0, 0.6),
+      ap3: Allpass::new(901.0/44100.0, 0.55),
+      ap4: Allpass::new(1519.0/44100.0, 0.5),
+      
+      gains: [0.0; 7],
+      rep_gain: 0.0,
+      rep_delay: 0.0,
     }
   }
 
   pub fn set_sample_rate (&mut self, sample_rate: f32) {
     self.sample_rate = sample_rate;
 
-    //self.orig_buf.init(23798.0/44100.0, sample_rate);
-    self.orig_buf.init(1.0, sample_rate);
+    //self.pulse_buf.init(23798.0/44100.0, sample_rate);
+    self.pulse_buf.init(MAX_PULSE, sample_rate);
 
-    self.delay_buf_1.init(1150.0/44100.0, sample_rate);
+    self.er_buf.init(7200.0/44100.0, sample_rate);
 
-    self.fb1.set_sample_rate(sample_rate);
-    self.fb2.set_sample_rate(sample_rate);
-    self.fb3.set_sample_rate(sample_rate);
-    self.fb4.set_sample_rate(sample_rate);
-  }
+    self.ap1.set_sample_rate(sample_rate);
+    self.ap2.set_sample_rate(sample_rate);
+    self.ap3.set_sample_rate(sample_rate);
+    self.ap4.set_sample_rate(sample_rate);
 
-  pub fn set_feedback (&mut self, fb: f32) {
-    self.feedback = fb;
-
-    self.fb1.set_feedback(fb);
-    self.fb2.set_feedback(fb);
-    self.fb3.set_feedback(fb);
-    self.fb4.set_feedback(fb);
+    self.recalc_delay();
   }
 
   pub fn set_size (&mut self, sz: f32) {
     self.size = sz;
 
-    self.fb1.set_size(sz);
-    self.fb2.set_size(sz);
-    self.fb3.set_size(sz);
-    self.fb4.set_size(sz);
+    self.ap1.set_size(sz);
+    self.ap2.set_size(sz);
+    self.ap3.set_size(sz);
+    self.ap4.set_size(sz);
+
+    self.recalc_delay();
   }
 
-  fn pulse (&self, pulse: &Pulse) -> Sample {
+  pub fn set_diffuse (&mut self, df: f32) {
+    self.diff = df*df;
+    self.ap1.set_feedback( 0.6 * df.powi(4) );
+    self.ap2.set_feedback( 0.6 * df.powi(2) );
+    self.ap3.set_feedback( 0.55 * df.powi(1) );
+    self.ap4.set_feedback( 0.5 * df.powf(0.5) );
+  }
+
+  pub fn recalc_delay (&mut self) {
+    // Delay indica cuanto tarda el eco en llegar a -20db,
+    // va desde 0.1 hasta 3 segundos.
+    let time = lerp(0.1, 3.0, self.delay);
+
+    // Tiempo que dura el último pulso en sonar, en segundos.
+    let rep_time = self.size * MAX_PULSE;
+
+    // Si cada t reduzco 0.1 (-20db) (ej: t=0.5), para cuando llegue a 1 seg,
+    // habré reducido 1/t veces (ej: 2), entonces para cuando llegue a rep_time
+    // (r, ej: r=1.5) habré reducido r/t (=1.5/0.5=3), que es la cantidad
+    // de veces que multipliqué 0.1.
+    let rep_gain = 0.1_f32.powf(rep_time / time);
+
+    // Si ese es el valor al final, y me toma 7 pasos llegar hasta allá
+    // (son 14 pulsos, 7 pares), debo hallar el número que multiplicado
+    // 7 veces me dé ese valor, la raíz séptima del número.
+    let step_gain = rep_gain.powf(1.0 / 7.0);
+
+    // Ahora sí, cada par debe multiplicar ese valor n veces
+    for (i, g) in self.gains.iter_mut().enumerate() {
+      *g = step_gain.powi(i as i32);
+    }
+
+    self.rep_gain = rep_gain;
+    self.rep_delay = rep_time;
+  }
+
+  fn pulse (&self, pulse: Pulse) -> Sample {
 
     //let pulse_gain = 1.0-( pulse.delay / (self.size*23798.0/44100.0) );
     //let vol = self.delay + pulse_gain*(1.0-self.delay);
-    let vol = pulse.gain;
 
-    let s = vol * self.orig_buf.get(pulse.delay * self.size);
+    let s = self.pulse_buf.get(pulse.delay * self.size);
 
     match pulse.side {
       Side::L => Sample::new(s, 0.0),
@@ -180,60 +240,49 @@ impl Room {
   }
   
   pub fn clock (&mut self, orig_l: f32, orig_r: f32) -> (f32, f32) {
-    let mono = (orig_l + orig_r)/2.0;
+    self.er_buf.push( Sample::new(orig_l, orig_r) );
 
-    //let repeat_pulse = self.orig_buf.get(self.size* (23798.0/44100.0)) * self.delay;
-    let repeat_pulse = 0.0;
-    self.orig_buf.push(mono + repeat_pulse);
+    let (er, mono) = {
+      macro_rules! er_pulse {
+        ($x:expr) => { self.er_buf.get(($x - 1519.0) * self.size / 44100.0) };
+        ($x:expr, $l:expr, $r:expr) => { er_pulse!($x).stereo_scale($l, $r) }
+      }
+
+      let a = er_pulse!(2577.0, -0.7, 0.0);
+      let b = er_pulse!(2771.0, 0.0, -0.7);
+      let c = er_pulse!(4252.0, 1.0, 0.0);
+      let d = er_pulse!(4581.0, 0.0, 1.0);
+
+      let mono = er_pulse!(7200.0).get_mono();
+
+      (a + b + c + d, mono)
+    };
+
+    let repeat_pulse = self.pulse_buf.get(self.rep_delay) * self.rep_gain;
+    self.pulse_buf.push(mono * self.gains[0] + repeat_pulse);
     
     //= Fase de pulsos =/
     let pulsed = {
-      let mut s = Sample::zero();
-      for pulse in PULSES.iter() {
-        s = s + self.pulse(pulse);
+      let mut s = er;
+      for i in 0 .. 7 {
+        let g = self.gains[i];
+        s = s +
+          self.pulse(PULSES[i*2]).scale(g) +
+          self.pulse(PULSES[i*2+1]).scale(g);
       }
       s
     };
 
-    let (base, pre) = {
-      let orig = pulsed;
-      self.delay_buf_1.push(orig);
-
-      // Base, con delay porque no es el primero en sonar, hay 3 pre-ecos
-      let base = self.delay_buf_1.get(self.size * 1148.0/44100.0);
-
-      // Pre-ecos: 313, 835 y 1148 muestras de retraso
-      let pre1 = self.delay_buf_1.get(self.size * (1148.0-313.0)/44100.0);
-      let pre2 = self.delay_buf_1.get(self.size * (1148.0-835.0)/44100.0);
-      let pre3 = orig; // Sin Delay porque en realidad es el primero que suena
-
-      let echoed = pre3.scale(0.6) + (pre2 + pre1).scale(-0.75 );
-      (base, echoed)
+    let diffused = {
+      // Allpass paralelos
+      let ap1 = self.ap1.clock(pulsed);
+      let ap2 = self.ap2.clock(ap1);
+      let ap3 = self.ap3.clock(ap2);
+      let ap4 = self.ap4.clock(ap3);
+      ap4.scale(0.25)
     };
 
-    let combed = {
-      // Filtros Comb paralelos
-      let fb1 = self.fb1.clock(base);
-      let fb2 = self.fb2.clock(base);
-      let fb3 = self.fb3.clock(base);
-      let fb4 = self.fb4.clock(base);
-
-      (fb1 + fb2 + fb3 + fb4).scale(0.5)
-    };
-
-    let diffused = base.lerp(combed + pre, self.diff1);
-
-    // Hay una segunda fase de difusión, pero no entendí bien qué hacía y lo
-    // que logré entender está en el cuaderno que se quedó en casa de klisman
-    // Preecos
-    //  235 -0.5
-    //  610 -0.5
-    //  845 0.25
-    // Combs, se aplican también a los preecos
-    //  470 (235*2)
-    //  626 (313*2)
-    // Estos Combs hacen feedback con los otros filtros,
-    // porque usa los mismos retrasos.
+    let diffused = pulsed.lerp(diffused, self.diff).scale(0.5);
 
     Sample::new(orig_l, orig_r).lerp(diffused, self.mix).to_tuple()
   }

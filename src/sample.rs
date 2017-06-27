@@ -26,6 +26,12 @@ impl Sample {
       r: y*self.r + x*other.r,
     }
   }
+
+  pub fn stereo_scale (self, a: f32, b: f32) -> Sample {
+    Sample {l: self.l*a, r: self.r*b}
+  }
+
+  pub fn get_mono (self) -> f32 { (self.l + self.r) / 2.0 }
 }
 
 impl Add for Sample {

@@ -518,6 +518,7 @@ pub struct HandlerImpl {
   hwnd: HWND,
   width: i32,
   height: i32,
+  registered: bool,
 }
 
 impl HandlerImpl {
@@ -527,6 +528,7 @@ impl HandlerImpl {
       hwnd: 0 as HWND,
       width: 0,
       height: 0,
+      registered: false,
     }
   }
 
@@ -536,7 +538,10 @@ impl HandlerImpl {
     // Already open
     if !self.hwnd.is_null() { return; }
 
-    register_class();
+    if !self.registered {
+      register_class();
+      self.registered = true;
+    }
 
     let syswnd = ptr as HWND;
 
@@ -634,4 +639,12 @@ impl HandlerImpl {
       &None => panic!("No associated component")
     }
   }*/
+}
+
+impl Drop for HandlerImpl {
+  fn drop (&mut self) {
+    if self.registered {
+      unregister_class();
+    }
+  }
 }
