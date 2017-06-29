@@ -13,7 +13,6 @@ pub struct Manager<T: Voice> {
   voices: [Container<T>; NUM_VOICES],
 }
 
-
 impl<T: Voice> Manager<T> {
 
   // TODO: Si hay una voz tocando esta nota, debería devolver esa
@@ -24,7 +23,7 @@ impl<T: Voice> Manager<T> {
 
     let mut exact = None;
     let mut best = iter.next().unwrap();
-    best.age += 1; // La primera no pasa por el bucle de arriba
+    best.age += 1;
 
     for curr in iter {
       // Debe hacerse al principio, para que todas las
@@ -47,10 +46,9 @@ impl<T: Voice> Manager<T> {
   }
 
   pub fn note_off (&mut self, note: u8) -> Option<&mut T> {
-    // Apagar todas las voces que tocan esta nota
-    // En realidad, solo debería haber una sola voz por nota
+    // Debería haber máximo una voz por nota
     self.voices.iter_mut().find(
-      |ref cont| cont.note == note
+      |ref cont| cont.voice.is_active() && cont.note == note
     ).map(|cont| &mut cont.voice)
   }
 
@@ -68,53 +66,3 @@ impl<T: Voice> Manager<T> {
     )
   }
 }
-
-/*struct IterMut <'a, T: 'a + Voice> {
-  pub iter: ::std::iter::Map
-      <::std::iter::Filter
-        <::std::slice::IterMut<'a, Container<T>>,
-        fn (&&mut Container<T>) -> bool>,
-      fn (&mut Container<T>) -> &'a mut T>,
-}
-
-impl <'a, T: 'a + Voice> Iterator for IterMut<'a, T> {
-  type Item = &'a mut T;
-  #[inline] fn next (&mut self) -> Option<Self::Item> { self.iter.next() }
-  #[inline] fn size_hint (&self) -> (usize, Option<usize>) { self.iter.size_hint() }
-}
-
-impl<'a, T: Voice> IntoIterator for &'a mut Manager<T> {
-  type Item = &'a mut T;
-  //type IntoIter = Filter<IterMut<'a, T>, fn(&&mut T)->bool>;
-  /*type IntoIter =
-    Map
-      <Filter
-        <IterMut<'a, Container<T>>,
-        fn (&&mut Container<T>) -> bool>,
-      fn (&mut Container<T>) -> &'a mut T>;*/
-  type IntoIter = FilterMap
-    <IterMut<'a, Container<T>>,
-    fn(&mut Container<T>) ->
-      Option<&mut T>>;
-
-  fn into_iter (self) ->  Self::IntoIter {
-    fn mymap <T: Voice> (cont: &mut Container<T>) -> Option<&mut T> {
-      if cont.v.is_active() { Some(&mut cont.v) } else { None }
-    }
-    self.voices.iter_mut().filter_map(mymap)
-    /*fn is_active<T: Voice> (cont: &&mut Container<T>) -> bool { cont.v.is_active() }
-    fn get_voice<T: Voice> (cont: &mut Container<T>) -> &mut T { &mut cont.v }
-    self.voices.iter_mut().filter(is_active).map(get_voice)*/
-  }
-}*/
-
-/*impl<'a, T: Voice> IntoIterator for &'a Manager<T> {
-  type Item = &'a T;
-  type IntoIter = Filter<Iter<'a, T>, fn(&& T)->bool>;
-
-  fn into_iter (self) -> Self::IntoIter {
-    fn voice_is_active<T: Voice> (cont: && Container<T>) -> bool { cont.v.is_active() }
-    self.voices.iter().filter(voice_is_active)
-  }
-}*/
-

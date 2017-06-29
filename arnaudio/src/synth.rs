@@ -26,6 +26,16 @@ pub struct Event {
   pub data: [u8; 3],
 }
 
+impl ::std::fmt::Debug for Event {
+  fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+    match self.data[0] {
+      0x90 => write!(f, "{{on  {}}}", self.data[1]),
+      0x80 => write!(f, "{{off {}}}", self.data[1]),
+      _ => write!(f, "{{{} {} {}}}", self.data[0], self.data[1], self.data[2])
+    }
+  }
+}
+
 #[derive(Default,Clone,Copy)]
 pub struct Architecture {
   pub sample_rate: f32,
@@ -187,30 +197,11 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
   fn process(&mut self, buffer: AudioBuffer<f32>) {
     let (_, mut outputs) = buffer.split();
 
-    let (mut hd, mut tl) = outputs.split_at_mut(1);
-    let left: &mut [f32] = hd[0];
-    let right: &mut [f32] = tl[0];
+    let (mut head, mut tail) = outputs.split_at_mut(1);
+    let left: &mut [f32] = head[0];
+    let right: &mut [f32] = tail[0];
 
-    //let events = ::std::mem::replace(&mut self.events, Vec::new());
-
-    let iterator = left.iter_mut().zip(right.iter_mut());
-
-    //self.synth.events(events);
-
-    /*
-    // Quería hacer algo como:
-    let mut last_event = 0;
-    for event in self.events.drain() {
-      let next_event = event.sample - last_event;
-      for (lsample, rsample) iterator.take(next_event) {
-        //LOLOLOL
-      }
-    }
-    // Pero no puedo porque take consume el iterador.
-    // Así lo hace MDA Piano
-    */
-
-    let mut events = self.events.drain(..);
+    let mut iterator = left.iter_mut().zip(right.iter_mut());
 
     let mut synth = self.synth.lock().unwrap();
 
@@ -234,23 +225,35 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
       }
     }
 
-    let mut last_event = events.next();
-    for (i, (lsample, rsample)) in iterator.enumerate() {
+    // El índice del sample del último evento procesado
+    let mut last_event = 0;
+    for event in self.events.drain(..) {
 
-      // NOTE: Esto está mal porque si hay dos eventos en el mismo sample
-      // uno se va a dejar para el siguiente (aunque casi no se nota)
-      match last_event.clone() {
-        Some( Event{ sample, data } ) if (sample as usize)<=i => {
-          match data[0] {
-            0x90 => synth.note_on(data[1], data[2]),
-            0x80 => synth.note_off(data[1]),
-            _ => {}
-          }
-          last_event = events.next();
-        }
+      match event.data[0] {
+        0x90 if event.data[2]==0 => synth.note_off(event.data[1]),
+        0x90 => synth.note_on(event.data[1], event.data[2]),
+        0x80 => synth.note_off(event.data[1]),
         _ => {}
       }
 
+      // El número de samples hasta el siguiente evento
+      let next_event = (
+        // Si el siguiente evento está en el pasado,
+        // no procesar ningún sample.
+        if event.sample < last_event { 0 }
+        else { event.sample - last_event }
+      );
+      last_event += next_event;
+
+      for (lsample, rsample) in iterator.by_ref().take(next_event as usize) {
+        let (l, r) = synth.clock();
+        *lsample = l;
+        *rsample = r;
+      }
+    }
+
+    // Para los samples que quedan cuando no quedan más eventos
+    for (lsample, rsample) in iterator {
       let (l, r) = synth.clock();
       *lsample = l;
       *rsample = r;
@@ -272,7 +275,6 @@ impl<T: Synth + 'static> Plugin for SynthPlugin<T> {
   }
 
   fn get_editor (&mut self) -> Option<&mut VstEditor> {
-    //None
     Some(&mut self.editor)
   }
 }
